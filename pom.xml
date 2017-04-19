@@ -8,65 +8,26 @@
   <artifactId>vertx-perf</artifactId>
   <version>1.0.0-SNAPSHOT</version>
 
-  <dependencies>
-    <dependency>
-      <groupId>io.vertx</groupId>
-      <artifactId>vertx-core</artifactId>
-      <version>3.2.1</version>
-      <exclusions>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty-common</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty-buffer</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty-transport</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty-handler</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty-codec-http</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty-codec</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>io.vertx</groupId>
-      <artifactId>vertx-web</artifactId>
-      <version>3.2.1</version>
-    </dependency>
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-all</artifactId>
-      <version>4.0.36.Final</version>
-    </dependency>
-  </dependencies>
-
   <properties>
     <!-- the main verticle class name -->
     <main.verticle>io.vertx.perf.core.http.SimpleServer</main.verticle>
     <!-- <main.verticle>io.vertx.perf.web.SimpleHttp</main.verticle>
     <main.verticle>io.vertx.perf.web.SimpleStatic</main.verticle> -->
+    <vertx.version>3.4.2-SNAPSHOT</vertx.version>
   </properties>
 
-  <repositories>
-    <repository>
-      <id>oss.sonatype.org-snapshot</id>
-      <url>http://oss.sonatype.org/content/repositories/snapshots</url>
-      <releases><enabled>false</enabled></releases>
-      <snapshots><enabled>true</enabled></snapshots>
-    </repository>
-  </repositories>
+  <dependencies>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-core</artifactId>
+      <version>${vertx.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web</artifactId>
+      <version>${vertx.version}</version>
+    </dependency>
+  </dependencies>
 
   <build>
     <pluginManagement>
@@ -113,12 +74,52 @@
               </transformers>
               <artifactSet>
               </artifactSet>
-              <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-fat.jar</outputFile>
+              <outputFile>${project.build.directory}/server-${vertx.version}-fat.jar</outputFile>
             </configuration>
           </execution>
         </executions>
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>3.3</id>
+      <properties>
+        <vertx.version>3.3.3</vertx.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>3.2</id>
+      <properties>
+        <vertx.version>3.2.1</vertx.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>3.1</id>
+      <properties>
+        <vertx.version>3.1.0</vertx.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>3.0</id>
+      <properties>
+        <vertx.version>3.0.0</vertx.version>
+      </properties>
+    </profile>
+  </profiles>
+
+  <repositories>
+    <repository>
+      <id>oss.sonatype.org-snapshot</id>
+      <url>http://oss.sonatype.org/content/repositories/snapshots</url>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
 
 </project>

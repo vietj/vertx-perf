@@ -2,11 +2,14 @@ package io.vertx.perf.core.http;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -41,7 +44,20 @@ public class SimpleServer extends AbstractVerticle {
     dateString = DATE_FORMAT.format(new Date());
   }
 
-  public void start() {
+  public void start() throws Exception {
+
+    InputStream in = Vertx.class.getClassLoader().getResourceAsStream("vertx-version.txt");
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    byte[] buffer = new byte[256];
+    while (true) {
+      int amount = in.read(buffer);
+      if (amount == -1) {
+        break;
+      }
+      out.write(buffer, 0, amount);
+    }
+    System.out.println("Vertx: " + out.toString());
+
     vertx.setPeriodic(1000, tid -> formatDate());
     formatDate();
     HttpServer server = vertx.createHttpServer();
