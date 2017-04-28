@@ -3,6 +3,7 @@ package io.vertx.perf.core.http;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.core.VertxOptions;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpServer;
@@ -57,6 +58,7 @@ public class SimpleServer extends AbstractVerticle {
       out.write(buffer, 0, amount);
     }
     System.out.println("Vertx: " + out.toString());
+    System.out.println("Default Event Loop Size: " + VertxOptions.DEFAULT_EVENT_LOOP_POOL_SIZE);
 
     vertx.setPeriodic(1000, tid -> formatDate());
     formatDate();
