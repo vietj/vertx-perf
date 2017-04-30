@@ -10,6 +10,7 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -22,58 +23,67 @@ import java.util.concurrent.Executors;
  */
 public class SimpleServer extends AbstractVerticle {
 
-  private final Buffer helloWorldBuffer = Buffer.buffer("Hello, world!");
-  private final CharSequence helloWorldContentLength = HttpHeaders.createOptimized(String.valueOf(helloWorldBuffer.length()));
-  private final DateFormat DATE_FORMAT = new SimpleDateFormat("EEE, dd MMM yyyyy HH:mm:ss z");
+  private static final boolean DISABLE_OPT_HEADERS = Boolean.getBoolean("vertx.disableOptimizedHeaders");
+  private static final String HOST = System.getProperty("vertx.host", "localhost");
+  private static final int PORT = Integer.getInteger("vertx.port", 8080);
 
+  static {
+    try {
+      InputStream in = Vertx.class.getClassLoader().getResourceAsStream("vertx-version.txt");
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      byte[] buffer = new byte[256];
+      while (true) {
+        int amount = in.read(buffer);
+        if (amount == -1) {
+          break;
+        }
+        out.write(buffer, 0, amount);
+      }
+      System.out.println("Vertx: " + out.toString());
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    System.out.println("Default Event Loop Size: " + VertxOptions.DEFAULT_EVENT_LOOP_POOL_SIZE);
+    System.out.println("Host: " + HOST);
+    System.out.println("Port: " + PORT);
+    System.out.println("Optimized headers : " + !DISABLE_OPT_HEADERS);
+  }
 
-  private static final CharSequence HEADER_SERVER_VERTX = HttpHeaders.createOptimized("vert.x");
-  private static final CharSequence RESPONSE_TYPE_PLAIN = HttpHeaders.createOptimized("text/plain");
-
+  private final DateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyyy HH:mm:ss z");
   private CharSequence dateString;
-
+  private final Buffer buffer = Buffer.buffer("Hello, world!");
+  private final CharSequence contentLength = DISABLE_OPT_HEADERS ? ("" + buffer.length()) : HttpHeaders.createOptimized(String.valueOf(buffer.length()));
+  private final CharSequence headerServerVertx = DISABLE_OPT_HEADERS ? "vert.x" : HttpHeaders.createOptimized("vert.x");
+  private final CharSequence responseTypePlain = DISABLE_OPT_HEADERS ? "text/plain" : HttpHeaders.createOptimized("text/plain");
 
   private void setHeaders(HttpServerResponse resp) {
-    resp.putHeader(HttpHeaders.CONTENT_TYPE, RESPONSE_TYPE_PLAIN);
-    resp.putHeader(HttpHeaders.CONTENT_LENGTH, helloWorldContentLength);
-    resp.putHeader(HttpHeaders.SERVER, HEADER_SERVER_VERTX );
+    resp.putHeader(HttpHeaders.CONTENT_TYPE, responseTypePlain);
+    resp.putHeader(HttpHeaders.CONTENT_LENGTH, contentLength);
+    resp.putHeader(HttpHeaders.SERVER, headerServerVertx);
     resp.putHeader(HttpHeaders.DATE, dateString);
   }
 
   private void formatDate() {
-    dateString = HttpHeaders.createOptimized(DATE_FORMAT.format(new Date()));
+    if (DISABLE_OPT_HEADERS) {
+      dateString = dateFormat.format(new Date());
+    } else {
+      dateString = HttpHeaders.createOptimized(dateFormat.format(new Date()));
+    }
   }
 
   public void start() throws Exception {
 
-    InputStream in = Vertx.class.getClassLoader().getResourceAsStream("vertx-version.txt");
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    byte[] buffer = new byte[256];
-    while (true) {
-      int amount = in.read(buffer);
-      if (amount == -1) {
-        break;
-      }
-      out.write(buffer, 0, amount);
-    }
-    System.out.println("Vertx: " + out.toString());
-    System.out.println("Default Event Loop Size: " + VertxOptions.DEFAULT_EVENT_LOOP_POOL_SIZE);
-
     vertx.setPeriodic(1000, tid -> formatDate());
     formatDate();
     HttpServer server = vertx.createHttpServer();
-    String host = System.getProperty("vertx.host", "localhost");
-    int port = Integer.getInteger("vertx.port", 8080);
-    System.out.println("Host: " + host);
-    System.out.println("Port: " + port);
     Handler<Throwable> errHandler = this::handleErr;
     server.requestHandler(req -> {
       req.exceptionHandler(errHandler);
       HttpServerResponse resp = req.response();
       setHeaders(resp);
       resp.exceptionHandler(errHandler);
-      resp.end(helloWorldBuffer);
-    }).listen(port, host);
+      resp.end(this.buffer);
+    }).listen(PORT, HOST);
   }
 
   private final Executor errs = Executors.newSingleThreadExecutor();
