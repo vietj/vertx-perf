@@ -1,8 +1,5 @@
 package io.vertx.perf.core.http;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http2.CharSequenceMap;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
@@ -14,12 +11,9 @@ import io.vertx.core.http.HttpServerResponse;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.LinkedList;
-import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -28,13 +22,7 @@ import java.util.concurrent.Executors;
  */
 public class SimpleServer extends AbstractVerticle {
 
-  private static ByteBuf directHelloWorld = Unpooled.directBuffer();
-
-  static {
-    directHelloWorld.writeCharSequence("Hello, world!", StandardCharsets.UTF_8);
-  }
-
-  private final Buffer helloWorldBuffer = Buffer.buffer(directHelloWorld);
+  private final Buffer helloWorldBuffer = Buffer.buffer("Hello, world!");
   private final CharSequence helloWorldContentLength = HttpHeaders.createOptimized(String.valueOf(helloWorldBuffer.length()));
   private final DateFormat DATE_FORMAT = new SimpleDateFormat("EEE, dd MMM yyyyy HH:mm:ss z");
 
