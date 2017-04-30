@@ -32,11 +32,11 @@ public class HelloWebServer {
   public void run() throws Exception {
     // Configure the server.
 
-    if (Epoll.isAvailable()) {
-      doRun(new EpollEventLoopGroup(), EpollServerSocketChannel.class, true);
-    } else {
+//    if (Epoll.isAvailable()) {
+//      doRun(new EpollEventLoopGroup(), EpollServerSocketChannel.class, true);
+//    } else {
       doRun(new NioEventLoopGroup(), NioServerSocketChannel.class, false);
-    }
+//    }
   }
 
   private void doRun(EventLoopGroup loupGroup, Class<? extends ServerChannel> serverChannelClass, boolean isNative) throws InterruptedException {
