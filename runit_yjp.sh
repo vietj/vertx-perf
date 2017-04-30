@@ -1,1 +1,0 @@
-java -agentpath:/home/tim/yjp-2015-build-15060/bin/linux-x86-64/libyjpagent.so=listen=10.39.168.2:10001 -Dio.netty.allocator.numDirectArenas=32 -Dio.netty.allocator.numHeapArenas=32 -Dvertx.disableContextTimings=true -Dvertx.host=192.168.123.25 -Dvertx.port=8080 -jar target/vertx-perf-3.0.0-SNAPSHOT-fat.jar -instances 32
