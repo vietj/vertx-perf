@@ -1,0 +1,1 @@
+java -server -XX:+UseNUMA -XX:+UseParallelGC -XX:+AggressiveOpts -jar target/server-netty-fat.jar
