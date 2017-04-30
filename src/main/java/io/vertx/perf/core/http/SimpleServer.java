@@ -2,6 +2,7 @@ package io.vertx.perf.core.http;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http2.CharSequenceMap;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
@@ -37,10 +38,11 @@ public class SimpleServer extends AbstractVerticle {
   private final CharSequence helloWorldContentLength = HttpHeaders.createOptimized(String.valueOf(helloWorldBuffer.length()));
   private final DateFormat DATE_FORMAT = new SimpleDateFormat("EEE, dd MMM yyyyy HH:mm:ss z");
 
+
   private static final CharSequence HEADER_SERVER_VERTX = HttpHeaders.createOptimized("vert.x");
   private static final CharSequence RESPONSE_TYPE_PLAIN = HttpHeaders.createOptimized("text/plain");
 
-  private String dateString;
+  private CharSequence dateString;
 
 
   private void setHeaders(HttpServerResponse resp) {
@@ -51,7 +53,7 @@ public class SimpleServer extends AbstractVerticle {
   }
 
   private void formatDate() {
-    dateString = DATE_FORMAT.format(new Date());
+    dateString = HttpHeaders.createOptimized(DATE_FORMAT.format(new Date()));
   }
 
   public void start() throws Exception {
