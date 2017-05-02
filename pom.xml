@@ -104,7 +104,7 @@
               </transformers>
               <artifactSet>
               </artifactSet>
-              <outputFile>${project.build.directory}/server-${vertx.version}-fat.jar</outputFile>
+              <outputFile>${project.build.directory}/vertx-server.jar</outputFile>
             </configuration>
           </execution>
           <execution>
@@ -123,7 +123,7 @@
               </transformers>
               <artifactSet>
               </artifactSet>
-              <outputFile>${project.build.directory}/server-netty-fat.jar</outputFile>
+              <outputFile>${project.build.directory}/netty-server.jar</outputFile>
             </configuration>
           </execution>
         </executions>
