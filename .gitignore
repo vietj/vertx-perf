@@ -1,3 +1,6 @@
+hotspot_*.log
+jitwatch.properties
+jitwatch.out
 .DS_Store
 .gradle
 .idea
