@@ -69,9 +69,9 @@ public class SimpleServer extends AbstractVerticle implements Handler<HttpServer
   public void start() throws Exception {
     vertx.setPeriodic(1000, tid -> formatDate());
     formatDate();
-    HttpServer server = vertx.createHttpServer();
-    server.requestHandler(req -> {
-    }).listen(PORT, HOST);
+    vertx.createHttpServer()
+        .requestHandler(this)
+        .listen(PORT, HOST);
   }
 
   @Override
