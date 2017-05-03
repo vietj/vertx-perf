@@ -2,11 +2,13 @@ package io.vertx.perf.core.http;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Handler;
+import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpServer;
+import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 
 import java.io.ByteArrayOutputStream;
@@ -21,7 +23,7 @@ import java.util.concurrent.Executors;
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
-public class SimpleServer extends AbstractVerticle {
+public class SimpleServer extends AbstractVerticle implements Handler<HttpServerRequest> {
 
   private static final boolean DISABLE_OPT_HEADERS = Boolean.getBoolean("vertx.disableOptimizedHeaders");
   private static final String HOST = System.getProperty("vertx.host", "localhost");
@@ -56,13 +58,6 @@ public class SimpleServer extends AbstractVerticle {
   private final CharSequence headerServerVertx = DISABLE_OPT_HEADERS ? "vert.x" : HttpHeaders.createOptimized("vert.x");
   private final CharSequence responseTypePlain = DISABLE_OPT_HEADERS ? "text/plain" : HttpHeaders.createOptimized("text/plain");
 
-  private void setHeaders(HttpServerResponse resp) {
-    resp.putHeader(HttpHeaders.CONTENT_TYPE, responseTypePlain);
-    resp.putHeader(HttpHeaders.CONTENT_LENGTH, contentLength);
-    resp.putHeader(HttpHeaders.SERVER, headerServerVertx);
-    resp.putHeader(HttpHeaders.DATE, dateString);
-  }
-
   private void formatDate() {
     if (DISABLE_OPT_HEADERS) {
       dateString = dateFormat.format(new Date());
@@ -72,21 +67,28 @@ public class SimpleServer extends AbstractVerticle {
   }
 
   public void start() throws Exception {
-
     vertx.setPeriodic(1000, tid -> formatDate());
     formatDate();
     HttpServer server = vertx.createHttpServer();
-    Handler<Throwable> errHandler = this::handleErr;
     server.requestHandler(req -> {
-      req.exceptionHandler(errHandler);
-      HttpServerResponse resp = req.response();
-      setHeaders(resp);
-      resp.exceptionHandler(errHandler);
-      resp.end(this.buffer);
     }).listen(PORT, HOST);
   }
 
+  @Override
+  public void handle(HttpServerRequest req) {
+    req.exceptionHandler(errHandler);
+    HttpServerResponse resp = req.response();
+    MultiMap header = resp.headers();
+    header.add(HttpHeaders.CONTENT_TYPE, responseTypePlain);
+    header.add(HttpHeaders.CONTENT_LENGTH, contentLength);
+    header.add(HttpHeaders.SERVER, headerServerVertx);
+    header.add(HttpHeaders.DATE, dateString);
+    resp.exceptionHandler(errHandler);
+    resp.end(buffer);
+  }
+
   private final Executor errs = Executors.newSingleThreadExecutor();
+  private final Handler<Throwable> errHandler = this::handleErr;
 
   private void handleErr(Throwable t) {
     errs.execute(() -> {
