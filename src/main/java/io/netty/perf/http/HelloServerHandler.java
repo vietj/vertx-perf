@@ -60,8 +60,6 @@ public class HelloServerHandler extends SimpleChannelInboundHandler<HttpRequest>
   @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpRequest msg) throws Exception {
     writeResponse(ctx, msg, PLAINTEXT_CONTENT_BUFFER.duplicate(), TYPE_PLAIN, PLAINTEXT_CLHEADER_VALUE);
-    FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND, Unpooled.EMPTY_BUFFER, false);
-    ctx.write(response).addListener(ChannelFutureListener.CLOSE);
   }
 
   private void writeResponse(ChannelHandlerContext ctx, HttpRequest request, ByteBuf buf, CharSequence contentType, CharSequence contentLength) {
@@ -80,6 +78,7 @@ public class HelloServerHandler extends SimpleChannelInboundHandler<HttpRequest>
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    cause.printStackTrace();
     ctx.close();
   }
 
