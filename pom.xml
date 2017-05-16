@@ -108,6 +108,25 @@
             </configuration>
           </execution>
           <execution>
+            <id>package-vertx2</id>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <manifestEntries>
+                    <Main-Class>io.vertx.perf.core.http.HelloWebServer</Main-Class>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+              <artifactSet>
+              </artifactSet>
+              <outputFile>${project.build.directory}/vertx-server2.jar</outputFile>
+            </configuration>
+          </execution>
+          <execution>
             <id>package-netty</id>
             <phase>package</phase>
             <goals>
