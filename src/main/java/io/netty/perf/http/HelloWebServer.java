@@ -35,7 +35,7 @@ public class HelloWebServer {
 //    if (Epoll.isAvailable()) {
 //      doRun(new EpollEventLoopGroup(), EpollServerSocketChannel.class, true);
 //    } else {
-      doRun(new NioEventLoopGroup(), NioServerSocketChannel.class, false);
+      doRun(new NioEventLoopGroup(4), NioServerSocketChannel.class, false);
 //    }
   }
 

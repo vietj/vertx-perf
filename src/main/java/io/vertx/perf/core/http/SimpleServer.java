@@ -7,7 +7,6 @@ import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpHeaders;
-import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 
@@ -25,13 +24,21 @@ import java.util.concurrent.Executors;
  */
 public class SimpleServer extends AbstractVerticle implements Handler<HttpServerRequest> {
 
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    vertx.deployVerticle(new SimpleServer());
+  }
+
   private static final boolean DISABLE_OPT_HEADERS = Boolean.getBoolean("vertx.disableOptimizedHeaders");
   private static final String HOST = System.getProperty("vertx.host", "localhost");
   private static final int PORT = Integer.getInteger("vertx.port", 8080);
 
   static {
     try {
-      InputStream in = Vertx.class.getClassLoader().getResourceAsStream("vertx-version.txt");
+      InputStream in = Vertx.class.getClassLoader().getResourceAsStream("META-INF/vertx/vertx-version.txt");
+      if (in == null) {
+        in = Vertx.class.getClassLoader().getResourceAsStream("vertx-version.txt");
+      }
       ByteArrayOutputStream out = new ByteArrayOutputStream();
       byte[] buffer = new byte[256];
       while (true) {
@@ -52,21 +59,29 @@ public class SimpleServer extends AbstractVerticle implements Handler<HttpServer
   }
 
   private final DateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyyy HH:mm:ss z");
-  private CharSequence dateString;
   private final Buffer buffer = Buffer.buffer("Hello, world!");
   private final CharSequence contentLength = DISABLE_OPT_HEADERS ? ("" + buffer.length()) : HttpHeaders.createOptimized(String.valueOf(buffer.length()));
   private final CharSequence headerServerVertx = DISABLE_OPT_HEADERS ? "vert.x" : HttpHeaders.createOptimized("vert.x");
   private final CharSequence responseTypePlain = DISABLE_OPT_HEADERS ? "text/plain" : HttpHeaders.createOptimized("text/plain");
 
+  private final CharSequence[] HEADERS = new CharSequence[] {
+      HttpHeaders.CONTENT_TYPE, responseTypePlain,
+      HttpHeaders.CONTENT_LENGTH, contentLength,
+      HttpHeaders.SERVER, headerServerVertx,
+      HttpHeaders.DATE, null
+  };
+
   private void formatDate() {
+    CharSequence dateString;
     if (DISABLE_OPT_HEADERS) {
       dateString = dateFormat.format(new Date());
     } else {
       dateString = HttpHeaders.createOptimized(dateFormat.format(new Date()));
     }
+    HEADERS[HEADERS.length - 1] = dateString;
   }
 
-  public void start() throws Exception {
+  public void start() {
     vertx.setPeriodic(1000, tid -> formatDate());
     formatDate();
     vertx.createHttpServer()
@@ -79,10 +94,9 @@ public class SimpleServer extends AbstractVerticle implements Handler<HttpServer
     req.exceptionHandler(errHandler);
     HttpServerResponse resp = req.response();
     MultiMap header = resp.headers();
-    header.add(HttpHeaders.CONTENT_TYPE, responseTypePlain);
-    header.add(HttpHeaders.CONTENT_LENGTH, contentLength);
-    header.add(HttpHeaders.SERVER, headerServerVertx);
-    header.add(HttpHeaders.DATE, dateString);
+    for (int i = 0; i < HEADERS.length; i += 2) {
+      header.add(HEADERS[i], HEADERS[i + 1]);
+    }
     resp.exceptionHandler(errHandler);
     resp.end(buffer);
   }
@@ -91,8 +105,6 @@ public class SimpleServer extends AbstractVerticle implements Handler<HttpServer
   private final Handler<Throwable> errHandler = this::handleErr;
 
   private void handleErr(Throwable t) {
-    errs.execute(() -> {
-      t.printStackTrace();
-    });
+    errs.execute(t::printStackTrace);
   }
 }

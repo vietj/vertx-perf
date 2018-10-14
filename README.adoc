@@ -1,1 +1,33 @@
-= Vert.x perf
+== Vert.x perf
+
+A playground for build jitwatch reports and flamegraphs.
+
+== jitwatch
+
+Running:
+
+```
+> sh jitwatch.sh
+```
+
+It produces an hotspot log that can be then opened in the UI.
+
+UI:
+
+```
+> mvn exec:java
+```
+
+== Benchmarking
+
+Warmup:
+
+```
+> wrk -H 'Host: localhost' -H 'Accept: text/plain,text/html;q=0.9,application/xhtml+xml;q=0.9,application/xml;q=0.8,*/*;q=0.7' -H 'Connection: keep-alive' --latency -d 60 -c 8 --timeout 8 -t 4 http://localhost:8080
+```
+
+Measure:
+
+```
+> wrk -H 'Host: localhost' -H 'Accept: text/plain,text/html;q=0.9,application/xhtml+xml;q=0.9,application/xml;q=0.8,*/*;q=0.7' -H 'Connection: keep-alive' --latency -d 60 -c 256 --timeout 8 -t 4 http://localhost:8080/plaintext -s pipeline.lua -- 16
+```

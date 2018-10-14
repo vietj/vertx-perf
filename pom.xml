@@ -9,11 +9,7 @@
   <version>1.0.0-SNAPSHOT</version>
 
   <properties>
-    <!-- the main verticle class name -->
-    <main.verticle>io.vertx.perf.core.http.SimpleServer</main.verticle>
-    <!-- <main.verticle>io.vertx.perf.web.SimpleHttp</main.verticle>
-    <main.verticle>io.vertx.perf.web.SimpleStatic</main.verticle> -->
-    <vertx.version>3.4.2-SNAPSHOT</vertx.version>
+    <vertx.version>3.4.2</vertx.version>
 
   </properties>
 
@@ -37,7 +33,12 @@
     <dependency>
       <groupId>com.chrisnewland</groupId>
       <artifactId>jitwatch</artifactId>
-      <version>1.0.0</version>
+      <version>1.1.5</version>
+    </dependency>
+    <dependency>
+      <groupId>com.chrisnewland</groupId>
+      <artifactId>jitwatch-ui</artifactId>
+      <version>1.1.5</version>
     </dependency>
   </dependencies>
 
@@ -94,8 +95,8 @@
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <manifestEntries>
-                    <Main-Class>io.vertx.core.Starter</Main-Class>
-                    <Main-Verticle>${main.verticle}</Main-Verticle>
+                    <Main-Class>io.vertx.core.Launcher</Main-Class>
+                    <Main-Verticle>io.vertx.perf.core.http.SimpleServer</Main-Verticle>
                   </manifestEntries>
                 </transformer>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
@@ -104,26 +105,7 @@
               </transformers>
               <artifactSet>
               </artifactSet>
-              <outputFile>${project.build.directory}/vertx-server.jar</outputFile>
-            </configuration>
-          </execution>
-          <execution>
-            <id>package-vertx2</id>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-            <configuration>
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <manifestEntries>
-                    <Main-Class>io.vertx.perf.core.http.HelloWebServer</Main-Class>
-                  </manifestEntries>
-                </transformer>
-              </transformers>
-              <artifactSet>
-              </artifactSet>
-              <outputFile>${project.build.directory}/vertx-server2.jar</outputFile>
+              <outputFile>${project.build.directory}/vertx-core-fat.jar</outputFile>
             </configuration>
           </execution>
           <execution>
@@ -142,7 +124,30 @@
               </transformers>
               <artifactSet>
               </artifactSet>
-              <outputFile>${project.build.directory}/netty-server.jar</outputFile>
+              <outputFile>${project.build.directory}/netty-fat.jar</outputFile>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Unpack source code for jitwatch -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.1.1</version>
+        <executions>
+          <execution>
+            <id>unpack-source</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>unpack-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeGroupIds>io.vertx,io.netty</includeGroupIds>
+              <classifier>sources</classifier>
+              <includeTypes>jar</includeTypes>
+              <outputDirectory>${project.build.directory}/sources</outputDirectory>
+              <includes>**/*.java</includes>
             </configuration>
           </execution>
         </executions>
