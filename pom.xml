@@ -10,7 +10,7 @@
 
   <properties>
     <vertx.version>3.4.2</vertx.version>
-
+    <netty.version>4.1.8.Final</netty.version>
   </properties>
 
   <dependencies>
@@ -27,7 +27,7 @@
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-transport-native-epoll</artifactId>
-      <version>4.1.8.Final </version>
+      <version>${netty.version}</version>
       <classifier>linux-x86_64</classifier>
     </dependency>
     <dependency>
@@ -157,27 +157,17 @@
 
   <profiles>
     <profile>
-      <id>3.3</id>
+      <id>3.5</id>
       <properties>
-        <vertx.version>3.3.3</vertx.version>
+        <vertx.version>3.5.4</vertx.version>
+        <netty.version>4.1.19.Final</netty.version>
       </properties>
     </profile>
     <profile>
-      <id>3.2</id>
+      <id>3.6</id>
       <properties>
-        <vertx.version>3.2.1</vertx.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>3.1</id>
-      <properties>
-        <vertx.version>3.1.0</vertx.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>3.0</id>
-      <properties>
-        <vertx.version>3.0.0</vertx.version>
+        <vertx.version>3.6.3</vertx.version>
+        <netty.version>4.1.30.Final</netty.version>
       </properties>
     </profile>
   </profiles>
