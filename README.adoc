@@ -23,7 +23,7 @@ UI:
 Warmup:
 
 ```
-> wrk -H 'Host: localhost' -H 'Accept: text/plain,text/html;q=0.9,application/xhtml+xml;q=0.9,application/xml;q=0.8,*/*;q=0.7' -H 'Connection: keep-alive' --latency -d 60 -c 8 --timeout 8 -t 4 http://localhost:8080
+> wrk -H 'Host: localhost' -H 'Accept: text/plain,text/html;q=0.9,application/xhtml+xml;q=0.9,application/xml;q=0.8,*/*;q=0.7' -H 'Connection: keep-alive' --latency -d 60 -c 8 --timeout 8 -t 4 http://localhost:8080/plaintext
 ```
 
 Measure:

@@ -1,0 +1,2099 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="1062" onload="init(evt)" viewBox="0 0 1200 1062" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:black; }
+	.func_g:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	var details, searchbtn, matchedtxt, svg;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+	}
+
+	// mouse-over for info
+	function s(node) {		// show
+		info = g_to_text(node);
+		details.nodeValue = "Function: " + info;
+	}
+	function c() {			// clear
+		details.nodeValue = ' ';
+	}
+
+	// ctrl-F for search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+	})
+
+	// functions
+	function find_child(parent, name, attr) {
+		var children = parent.childNodes;
+		for (var i=0; i<children.length;i++) {
+			if (children[i].tagName == name)
+				return (attr != undefined) ? children[i].attributes[attr].value : children[i];
+		}
+		return;
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_"+attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_"+attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_"+attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes["width"].value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes["x"].value = parseFloat(r.attributes["x"].value) +3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2*12*0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		// Fit in full text width
+		if (/^ *$/.test(txt) || t.getSubStringLength(0, txt.length) < w)
+			return;
+
+		for (var x=txt.length-2; x>0; x--) {
+			if (t.getSubStringLength(0, x+2) <= w) {
+				t.textContent = txt.substring(0,x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = (parseFloat(e.attributes["x"].value) - x - 10) * ratio + 10;
+				if(e.tagName == "text") e.attributes["x"].value = find_child(e.parentNode, "rect", "x") + 3;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseFloat(e.attributes["width"].value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_child(c[i], x-10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes["x"] != undefined) {
+				orig_save(e, "x");
+				e.attributes["x"].value = 10;
+			}
+			if (e.attributes["width"] != undefined) {
+				orig_save(e, "width");
+				e.attributes["width"].value = parseInt(svg.width.baseVal.value) - (10*2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for(var i=0, c=e.childNodes; i<c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr["width"].value);
+		var xmin = parseFloat(attr["x"].value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr["y"].value);
+		var ratio = (svg.width.baseVal.value - 2*10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "1.0";
+
+		var el = document.getElementsByTagName("g");
+		for(var i=0;i<el.length;i++){
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a["x"].value);
+			var ew = parseFloat(a["width"].value);
+			// Is it an ancestor
+			if (0 == 0) {
+				var upstack = parseFloat(a["y"].value) > ymin;
+			} else {
+				var upstack = parseFloat(a["y"].value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.style["opacity"] = "0.5";
+					zoom_parent(e);
+					e.onclick = function(e){unzoom(); zoom(this);};
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.style["display"] = "none";
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.style["display"] = "none";
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					e.onclick = function(e){zoom(this);};
+					update_text(e);
+				}
+			}
+		}
+	}
+	function unzoom() {
+		var unzoombtn = document.getElementById("unzoom");
+		unzoombtn.style["opacity"] = "0.0";
+
+		var el = document.getElementsByTagName("g");
+		for(i=0;i<el.length;i++) {
+			el[i].style["display"] = "block";
+			el[i].style["opacity"] = "1";
+			zoom_reset(el[i]);
+			update_text(el[i]);
+		}
+	}
+
+	// search
+	function reset_search() {
+		var el = document.getElementsByTagName("rect");
+		for (var i=0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)", "");
+			if (term != null) {
+				search(term)
+			}
+		} else {
+			reset_search();
+			searching = 0;
+			searchbtn.style["opacity"] = "0.1";
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.style["opacity"] = "0.0";
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		var re = new RegExp(term);
+		var el = document.getElementsByTagName("g");
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			if (e.attributes["class"].value != "func_g")
+				continue;
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (rect == null) {
+				// the rect might be wrapped in an anchor
+				// if nameattr href is being used
+				if (rect = find_child(e, "a")) {
+				    rect = find_child(r, "rect");
+				}
+			}
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes["width"].value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes["x"].value);
+				orig_save(rect, "fill");
+				rect.attributes["fill"].value =
+				    "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+
+		searchbtn.style["opacity"] = "1.0";
+		searchbtn.firstChild.nodeValue = "Reset Search"
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.style["opacity"] = "1.0";
+		pct = 100 * count / maxwidth;
+		if (pct == 100)
+			pct = "100"
+		else
+			pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+	function searchover(e) {
+		searchbtn.style["opacity"] = "1.0";
+	}
+	function searchout(e) {
+		if (searching) {
+			searchbtn.style["opacity"] = "1.0";
+		} else {
+			searchbtn.style["opacity"] = "0.1";
+		}
+	}
+]]>
+</script>
+<rect x="0" y="0" width="100%" height="100%" fill="rgb(240,240,220)"/>
+<text x="600" y="24" text-anchor="middle" style="font-size:17px">Flame Graph</text>
+<text x="10" y="1045" id="details"> </text>
+<text x="10" y="24" id="unzoom" onclick="unzoom()" style="opacity:0.0;cursor:pointer">Reset Zoom</text>
+<text x="1090" y="24" id="search" onmouseover="searchover()" onmouseout="searchout()" onclick="search_prompt()" style="opacity:0.1;cursor:pointer">Search</text>
+<text x="1090" y="1045" id="matched"> </text>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>all (5,097 samples, 100.00%)</title><rect x="10.0" y="1011.0" width="1180.0" height="15" fill="#c83232" rx="2" ry="2"/>
+<text x="13.0" y="1022.0">all</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Thread.run (5,086 samples, 99.78%)</title><rect x="10.2" y="995.0" width="1177.5" height="15" fill="#39cf39" rx="2" ry="2"/>
+<text x="13.2" y="1006.0">java/lang/Thread.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/FastThreadLocalRunnable.run (5,086 samples, 99.78%)</title><rect x="10.2" y="979.0" width="1177.5" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="13.2" y="990.0">io/netty/util/concurrent/FastThreadLocalRunnable.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/SingleThreadEventExecutor$5.run (5,086 samples, 99.78%)</title><rect x="10.2" y="963.0" width="1177.5" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="13.2" y="974.0">io/netty/util/concurrent/SingleThreadEventExecutor$5.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.run (5,085 samples, 99.76%)</title><rect x="10.2" y="947.0" width="1177.3" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="13.2" y="958.0">io/netty/channel/nio/NioEventLoop.run</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.processSelectedKeys (4,783 samples, 93.84%)</title><rect x="10.9" y="931.0" width="1107.3" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="13.9" y="942.0">io/netty/channel/nio/NioEventLoop.processSelectedKeys</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.processSelectedKeysOptimized (4,782 samples, 93.82%)</title><rect x="10.9" y="915.0" width="1107.1" height="15" fill="#34ca34" rx="2" ry="2"/>
+<text x="13.9" y="926.0">io/netty/channel/nio/NioEventLoop.processSelectedKeysOptimized</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.processSelectedKey (4,782 samples, 93.82%)</title><rect x="10.9" y="899.0" width="1107.1" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="13.9" y="910.0">io/netty/channel/nio/NioEventLoop.processSelectedKey</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioByteChannel$NioByteUnsafe.read (4,782 samples, 93.82%)</title><rect x="10.9" y="883.0" width="1107.1" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="13.9" y="894.0">io/netty/channel/nio/AbstractNioByteChannel$NioByteUnsafe.read</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline.fireChannelRead (4,653 samples, 91.29%)</title><rect x="11.4" y="867.0" width="1077.2" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="14.4" y="878.0">io/netty/channel/DefaultChannelPipeline.fireChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (4,653 samples, 91.29%)</title><rect x="11.4" y="851.0" width="1077.2" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="14.4" y="862.0">io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (4,651 samples, 91.25%)</title><rect x="11.9" y="835.0" width="1076.7" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="14.9" y="846.0">io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.channelRead (4,651 samples, 91.25%)</title><rect x="11.9" y="819.0" width="1076.7" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="14.9" y="830.0">io/netty/channel/DefaultChannelPipeline$HeadContext.channelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (4,651 samples, 91.25%)</title><rect x="11.9" y="803.0" width="1076.7" height="15" fill="#34c934" rx="2" ry="2"/>
+<text x="14.9" y="814.0">io/netty/channel/AbstractChannelHandlerContext.fireChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (4,651 samples, 91.25%)</title><rect x="11.9" y="787.0" width="1076.7" height="15" fill="#35ca35" rx="2" ry="2"/>
+<text x="14.9" y="798.0">io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (4,651 samples, 91.25%)</title><rect x="11.9" y="771.0" width="1076.7" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="14.9" y="782.0">io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.channelRead (4,647 samples, 91.17%)</title><rect x="12.8" y="755.0" width="1075.8" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="15.8" y="766.0">io/netty/handler/codec/ByteToMessageDecoder.channelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.callDecode (4,421 samples, 86.74%)</title><rect x="13.9" y="739.0" width="1023.5" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="16.9" y="750.0">io/netty/handler/codec/ByteToMessageDecoder.callDecode</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.decodeRemovalReentryProtection (641 samples, 12.58%)</title><rect x="15.1" y="723.0" width="148.4" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="18.1" y="734.0">io/netty/handler/co..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder.decode (640 samples, 12.56%)</title><rect x="15.3" y="707.0" width="148.2" height="15" fill="#36cb36" rx="2" ry="2"/>
+<text x="18.3" y="718.0">io/netty/handler/co..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder$LineParser.parse (25 samples, 0.49%)</title><rect x="25.7" y="691.0" width="5.8" height="15" fill="#4bde4b" rx="2" ry="2"/>
+<text x="28.7" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder$HeaderParser.parse (25 samples, 0.49%)</title><rect x="25.7" y="675.0" width="5.8" height="15" fill="#5bed5b" rx="2" ry="2"/>
+<text x="28.7" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.forEachByte (21 samples, 0.41%)</title><rect x="26.7" y="659.0" width="4.8" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="29.7" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.forEachByteAsc0 (14 samples, 0.27%)</title><rect x="28.3" y="643.0" width="3.2" height="15" fill="#69fb69" rx="2" ry="2"/>
+<text x="31.3" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder$HeaderParser.process (13 samples, 0.26%)</title><rect x="28.5" y="627.0" width="3.0" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="31.5" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder.readHeaders (404 samples, 7.93%)</title><rect x="31.5" y="691.0" width="93.6" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="34.5" y="702.0">io/netty/ha..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder$HeaderParser.parse (170 samples, 3.34%)</title><rect x="36.2" y="675.0" width="39.3" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="39.2" y="686.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.forEachByte (165 samples, 3.24%)</title><rect x="36.4" y="659.0" width="38.2" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="39.4" y="670.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.forEachByteAsc0 (164 samples, 3.22%)</title><rect x="36.6" y="643.0" width="38.0" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="39.6" y="654.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledUnsafeDirectByteBuf._getByte (25 samples, 0.49%)</title><rect x="48.4" y="627.0" width="5.8" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="51.4" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/UnsafeByteBufUtil.getByte (25 samples, 0.49%)</title><rect x="48.4" y="611.0" width="5.8" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="51.4" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent.getByte (25 samples, 0.49%)</title><rect x="48.4" y="595.0" width="5.8" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="51.4" y="606.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent0.getByte (25 samples, 0.49%)</title><rect x="48.4" y="579.0" width="5.8" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="51.4" y="590.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder$HeaderParser.process (88 samples, 1.73%)</title><rect x="54.2" y="627.0" width="20.4" height="15" fill="#34ca34" rx="2" ry="2"/>
+<text x="57.2" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/AppendableCharSequence.append (47 samples, 0.92%)</title><rect x="63.7" y="611.0" width="10.9" height="15" fill="#5ef05e" rx="2" ry="2"/>
+<text x="66.7" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder.contentLength (16 samples, 0.31%)</title><rect x="75.5" y="675.0" width="3.7" height="15" fill="#45da45" rx="2" ry="2"/>
+<text x="78.5" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpUtil.getContentLength (15 samples, 0.29%)</title><rect x="75.7" y="659.0" width="3.5" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="78.7" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.get (11 samples, 0.22%)</title><rect x="76.7" y="643.0" width="2.5" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="79.7" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.get0 (11 samples, 0.22%)</title><rect x="76.7" y="627.0" width="2.5" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="79.7" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/AsciiString.hashCode (6 samples, 0.12%)</title><rect x="77.8" y="611.0" width="1.4" height="15" fill="#47dc47" rx="2" ry="2"/>
+<text x="80.8" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder.splitHeader (127 samples, 2.49%)</title><rect x="79.7" y="675.0" width="29.4" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="82.7" y="686.0">io..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder.findNonWhitespace (24 samples, 0.47%)</title><rect x="88.9" y="659.0" width="5.6" height="15" fill="#6cfe6c" rx="2" ry="2"/>
+<text x="91.9" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Character.isWhitespace (8 samples, 0.16%)</title><rect x="92.6" y="643.0" width="1.9" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="95.6" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Character.isWhitespace (8 samples, 0.16%)</title><rect x="92.6" y="627.0" width="1.9" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="95.6" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/CharacterDataLatin1.isWhitespace (5 samples, 0.10%)</title><rect x="93.3" y="611.0" width="1.2" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="96.3" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/AppendableCharSequence.charAt (6 samples, 0.12%)</title><rect x="94.5" y="659.0" width="1.4" height="15" fill="#36cb36" rx="2" ry="2"/>
+<text x="97.5" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/AppendableCharSequence.subStringUnsafe (51 samples, 1.00%)</title><rect x="95.9" y="659.0" width="11.8" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="98.9" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/String.&lt;init&gt; (31 samples, 0.61%)</title><rect x="98.0" y="643.0" width="7.2" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="101.0" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/Arrays.copyOfRange (29 samples, 0.57%)</title><rect x="98.4" y="627.0" width="6.8" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="101.4" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jshort_disjoint_arraycopy (5 samples, 0.10%)</title><rect x="104.0" y="611.0" width="1.2" height="15" fill="#e05454" rx="2" ry="2"/>
+<text x="107.0" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jshort_disjoint_arraycopy (9 samples, 0.18%)</title><rect x="105.6" y="643.0" width="2.1" height="15" fill="#f26f6f" rx="2" ry="2"/>
+<text x="108.6" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Character.isWhitespace (6 samples, 0.12%)</title><rect x="107.7" y="659.0" width="1.4" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="110.7" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Character.isWhitespace (6 samples, 0.12%)</title><rect x="107.7" y="643.0" width="1.4" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="110.7" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpUtil.isTransferEncodingChunked (5 samples, 0.10%)</title><rect x="109.1" y="675.0" width="1.1" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="112.1" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/AppendableCharSequence.charAt (7 samples, 0.14%)</title><rect x="110.2" y="675.0" width="1.7" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="113.2" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.add (57 samples, 1.12%)</title><rect x="111.9" y="675.0" width="13.2" height="15" fill="#3bd13b" rx="2" ry="2"/>
+<text x="114.9" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.add (57 samples, 1.12%)</title><rect x="111.9" y="659.0" width="13.2" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="114.9" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.add (57 samples, 1.12%)</title><rect x="111.9" y="643.0" width="13.2" height="15" fill="#67f967" rx="2" ry="2"/>
+<text x="114.9" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/AsciiString.hashCode (37 samples, 0.73%)</title><rect x="112.3" y="627.0" width="8.6" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="115.3" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent.hashCodeAscii (33 samples, 0.65%)</title><rect x="113.3" y="611.0" width="7.6" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="116.3" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent.hashCodeAsciiCompute (8 samples, 0.16%)</title><rect x="117.0" y="595.0" width="1.8" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="120.0" y="606.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent.hashCodeAsciiSanitizeInt (5 samples, 0.10%)</title><rect x="117.7" y="579.0" width="1.1" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="120.7" y="590.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent.hashCodeAsciiSanitizeInt (6 samples, 0.12%)</title><rect x="118.8" y="595.0" width="1.4" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="121.8" y="606.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.add0 (18 samples, 0.35%)</title><rect x="120.9" y="627.0" width="4.2" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="123.9" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder.skipControlCharacters (25 samples, 0.49%)</title><rect x="125.1" y="691.0" width="5.7" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="128.1" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.getUnsignedByte (11 samples, 0.22%)</title><rect x="127.6" y="675.0" width="2.6" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="130.6" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.getByte (11 samples, 0.22%)</title><rect x="127.6" y="659.0" width="2.6" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="130.6" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.checkIndex (11 samples, 0.22%)</title><rect x="127.6" y="643.0" width="2.6" height="15" fill="#37cc37" rx="2" ry="2"/>
+<text x="130.6" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.checkIndex (11 samples, 0.22%)</title><rect x="127.6" y="627.0" width="2.6" height="15" fill="#6afc6a" rx="2" ry="2"/>
+<text x="130.6" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.checkIndex0 (5 samples, 0.10%)</title><rect x="127.6" y="611.0" width="1.2" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="130.6" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.checkRangeBounds (5 samples, 0.10%)</title><rect x="127.6" y="595.0" width="1.2" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="130.6" y="606.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/VertxHttpRequestDecoder.createMessage (5 samples, 0.10%)</title><rect x="129.0" y="611.0" width="1.2" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="132.0" y="622.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder.splitInitialLine (89 samples, 1.75%)</title><rect x="130.8" y="691.0" width="20.7" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="133.8" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder.findNonWhitespace (11 samples, 0.22%)</title><rect x="134.8" y="675.0" width="2.5" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="137.8" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Character.isWhitespace (5 samples, 0.10%)</title><rect x="136.2" y="659.0" width="1.1" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="139.2" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Character.isWhitespace (5 samples, 0.10%)</title><rect x="136.2" y="643.0" width="1.1" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="139.2" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectDecoder.findWhitespace (14 samples, 0.27%)</title><rect x="137.3" y="675.0" width="3.3" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="140.3" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Character.isWhitespace (13 samples, 0.26%)</title><rect x="137.6" y="659.0" width="3.0" height="15" fill="#35ca35" rx="2" ry="2"/>
+<text x="140.6" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Character.isWhitespace (13 samples, 0.26%)</title><rect x="137.6" y="643.0" width="3.0" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="140.6" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/CharacterDataLatin1.isWhitespace (10 samples, 0.20%)</title><rect x="138.3" y="627.0" width="2.3" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="141.3" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/AppendableCharSequence.subStringUnsafe (47 samples, 0.92%)</title><rect x="140.6" y="675.0" width="10.9" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="143.6" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/String.&lt;init&gt; (11 samples, 0.22%)</title><rect x="144.0" y="659.0" width="2.6" height="15" fill="#39ce39" rx="2" ry="2"/>
+<text x="147.0" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/Arrays.copyOfRange (10 samples, 0.20%)</title><rect x="144.3" y="643.0" width="2.3" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="147.3" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jshort_arraycopy (10 samples, 0.20%)</title><rect x="146.6" y="659.0" width="2.3" height="15" fill="#ed6969" rx="2" ry="2"/>
+<text x="149.6" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jshort_disjoint_arraycopy (11 samples, 0.22%)</title><rect x="148.9" y="659.0" width="2.6" height="15" fill="#f77777" rx="2" ry="2"/>
+<text x="151.9" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/VertxHttpRequestDecoder.createMessage (52 samples, 1.02%)</title><rect x="151.5" y="691.0" width="12.0" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="154.5" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpMethod.valueOf (33 samples, 0.65%)</title><rect x="153.1" y="675.0" width="7.6" height="15" fill="#5ef05e" rx="2" ry="2"/>
+<text x="156.1" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpMethod$EnumNameMap.get (33 samples, 0.65%)</title><rect x="153.1" y="659.0" width="7.6" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="156.1" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpMethod$EnumNameMap.hashCode (12 samples, 0.24%)</title><rect x="157.9" y="643.0" width="2.8" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="160.9" y="654.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/String.hashCode (12 samples, 0.24%)</title><rect x="157.9" y="627.0" width="2.8" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="160.9" y="638.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.&lt;init&gt; (9 samples, 0.18%)</title><rect x="161.4" y="675.0" width="2.1" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="164.4" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead (3,775 samples, 74.06%)</title><rect x="163.5" y="723.0" width="873.9" height="15" fill="#44d844" rx="2" ry="2"/>
+<text x="166.5" y="734.0">io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead (3,775 samples, 74.06%)</title><rect x="163.5" y="707.0" width="873.9" height="15" fill="#47db47" rx="2" ry="2"/>
+<text x="166.5" y="718.0">io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (3,764 samples, 73.85%)</title><rect x="164.9" y="691.0" width="871.4" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="167.9" y="702.0">io/netty/channel/AbstractChannelHandlerContext.fireChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.findContextInbound (7 samples, 0.14%)</title><rect x="164.9" y="675.0" width="1.6" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="167.9" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (3,757 samples, 73.71%)</title><rect x="166.5" y="675.0" width="869.8" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="169.5" y="686.0">io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.executor (6 samples, 0.12%)</title><rect x="166.5" y="659.0" width="1.4" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="169.5" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (3,746 samples, 73.49%)</title><rect x="167.9" y="659.0" width="867.2" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="170.9" y="670.0">io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/VertxHandler.channelRead (3,741 samples, 73.40%)</title><rect x="169.0" y="643.0" width="866.1" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="172.0" y="654.0">io/vertx/core/net/impl/VertxHandler.channelRead</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/impl/ContextImpl.executeFromIO (3,735 samples, 73.28%)</title><rect x="170.4" y="627.0" width="864.7" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="173.4" y="638.0">io/vertx/core/impl/ContextImpl.executeFromIO</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/impl/EventLoopContext.execute (3,735 samples, 73.28%)</title><rect x="170.4" y="611.0" width="864.7" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="173.4" y="622.0">io/vertx/core/impl/EventLoopContext.execute</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/impl/ContextImpl.executeTask (3,735 samples, 73.28%)</title><rect x="170.4" y="595.0" width="864.7" height="15" fill="#4ee14e" rx="2" ry="2"/>
+<text x="173.4" y="606.0">io/vertx/core/impl/ContextImpl.executeTask</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/VertxHandler$$Lambda$62/348673736.handle (3,722 samples, 73.02%)</title><rect x="173.4" y="579.0" width="861.7" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="176.4" y="590.0">io/vertx/core/net/impl/VertxHandler$$Lambda$62/348673736.handle</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/Http1xServerConnection.handleMessage (3,721 samples, 73.00%)</title><rect x="173.7" y="563.0" width="861.4" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="176.7" y="574.0">io/vertx/core/http/impl/Http1xServerConnection.handleMessage</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/HttpServerRequestImpl.handleBegin (3,704 samples, 72.67%)</title><rect x="177.6" y="547.0" width="857.5" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="180.6" y="558.0">io/vertx/core/http/impl/HttpServerRequestImpl.handleBegin</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/HttpServerResponseImpl.&lt;init&gt; (30 samples, 0.59%)</title><rect x="182.0" y="531.0" width="7.0" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="185.0" y="542.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.contains (24 samples, 0.47%)</title><rect x="183.4" y="515.0" width="5.6" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="186.4" y="526.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/AsciiString.contentEqualsIgnoreCase (12 samples, 0.24%)</title><rect x="185.7" y="499.0" width="2.8" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="188.7" y="510.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/AsciiString.contentEqualsIgnoreCase (12 samples, 0.24%)</title><rect x="185.7" y="483.0" width="2.8" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="188.7" y="494.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/perf/core/http/SimpleServer.handle (3,655 samples, 71.71%)</title><rect x="189.0" y="531.0" width="846.1" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="192.0" y="542.0">io/vertx/perf/core/http/SimpleServer.handle</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/perf/core/http/SimpleServer.handle (3,655 samples, 71.71%)</title><rect x="189.0" y="515.0" width="846.1" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="192.0" y="526.0">io/vertx/perf/core/http/SimpleServer.handle</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/HttpServerResponseImpl.end (3,611 samples, 70.85%)</title><rect x="193.6" y="499.0" width="836.0" height="15" fill="#5ef15e" rx="2" ry="2"/>
+<text x="196.6" y="510.0">io/vertx/core/http/impl/HttpServerResponseImpl.end</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/HttpServerResponseImpl.end (3,611 samples, 70.85%)</title><rect x="193.6" y="483.0" width="836.0" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="196.6" y="494.0">io/vertx/core/http/impl/HttpServerResponseImpl.end</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/WrappedByteBuf.readableBytes (5 samples, 0.10%)</title><rect x="202.8" y="467.0" width="1.2" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="205.8" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/buffer/impl/BufferImpl.getByteBuf (21 samples, 0.41%)</title><rect x="204.0" y="467.0" width="4.9" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="207.0" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/UnreleasableByteBuf.duplicate (18 samples, 0.35%)</title><rect x="204.7" y="451.0" width="4.2" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="207.7" y="462.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.duplicate (10 samples, 0.20%)</title><rect x="206.6" y="435.0" width="2.3" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="209.6" y="446.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/Http1xServerConnection.responseComplete (9 samples, 0.18%)</title><rect x="208.9" y="467.0" width="2.0" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="211.9" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/Http1xServerConnection.writeToChannel (468 samples, 9.18%)</title><rect x="210.9" y="467.0" width="108.4" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="213.9" y="478.0">io/vertx/core..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/ConnectionBase.writeToChannel (466 samples, 9.14%)</title><rect x="211.4" y="451.0" width="107.9" height="15" fill="#39cf39" rx="2" ry="2"/>
+<text x="214.4" y="462.0">io/vertx/core..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/ConnectionBase.write (456 samples, 8.95%)</title><rect x="213.7" y="435.0" width="105.6" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="216.7" y="446.0">io/vertx/core..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (455 samples, 8.93%)</title><rect x="214.0" y="419.0" width="105.3" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="217.0" y="430.0">io/netty/chan..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (454 samples, 8.91%)</title><rect x="214.2" y="403.0" width="105.1" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="217.2" y="414.0">io/netty/chan..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.executor (9 samples, 0.18%)</title><rect x="214.4" y="387.0" width="2.1" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="217.4" y="398.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (444 samples, 8.71%)</title><rect x="216.5" y="387.0" width="102.8" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="219.5" y="398.0">io/netty/cha..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeHandler (5 samples, 0.10%)</title><rect x="216.5" y="371.0" width="1.2" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="219.5" y="382.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (439 samples, 8.61%)</title><rect x="217.7" y="371.0" width="101.6" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="220.7" y="382.0">io/netty/cha..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.addMessage (10 samples, 0.20%)</title><rect x="218.6" y="355.0" width="2.3" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="221.6" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.write (58 samples, 1.14%)</title><rect x="220.9" y="355.0" width="13.4" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="223.9" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.write (58 samples, 1.14%)</title><rect x="220.9" y="339.0" width="13.4" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="223.9" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.addMessage (25 samples, 0.49%)</title><rect x="223.5" y="323.0" width="5.7" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="226.5" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer$Entry.newInstance (5 samples, 0.10%)</title><rect x="223.7" y="307.0" width="1.1" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="226.7" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/Recycler.get (5 samples, 0.10%)</title><rect x="223.7" y="291.0" width="1.1" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="226.7" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.incrementPendingOutboundBytes (19 samples, 0.37%)</title><rect x="224.8" y="307.0" width="4.4" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="227.8" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioByteChannel.filterOutboundMessage (8 samples, 0.16%)</title><rect x="226.5" y="291.0" width="1.8" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="229.5" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultMessageSizeEstimator$HandleImpl.size (7 samples, 0.14%)</title><rect x="229.7" y="323.0" width="1.6" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="232.7" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioByteChannel.filterOutboundMessage (13 samples, 0.26%)</title><rect x="231.3" y="323.0" width="3.0" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="234.3" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageEncoder.write (367 samples, 7.20%)</title><rect x="234.3" y="355.0" width="85.0" height="15" fill="#3ad03a" rx="2" ry="2"/>
+<text x="237.3" y="366.0">io/netty/h..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (24 samples, 0.47%)</title><rect x="234.3" y="339.0" width="5.6" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="237.3" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (24 samples, 0.47%)</title><rect x="234.3" y="323.0" width="5.6" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="237.3" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (24 samples, 0.47%)</title><rect x="234.3" y="307.0" width="5.6" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="237.3" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (24 samples, 0.47%)</title><rect x="234.3" y="291.0" width="5.6" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="237.3" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.write (24 samples, 0.47%)</title><rect x="234.3" y="275.0" width="5.6" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="237.3" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.write (24 samples, 0.47%)</title><rect x="234.3" y="259.0" width="5.6" height="15" fill="#3ad03a" rx="2" ry="2"/>
+<text x="237.3" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.addMessage (17 samples, 0.33%)</title><rect x="234.3" y="243.0" width="4.0" height="15" fill="#6cfe6c" rx="2" ry="2"/>
+<text x="237.3" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer$Entry.newInstance (8 samples, 0.16%)</title><rect x="234.8" y="227.0" width="1.8" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="237.8" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/Recycler.get (8 samples, 0.16%)</title><rect x="234.8" y="211.0" width="1.8" height="15" fill="#3acf3a" rx="2" ry="2"/>
+<text x="237.8" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/Recycler$Stack.pop (5 samples, 0.10%)</title><rect x="234.8" y="195.0" width="1.2" height="15" fill="#53e753" rx="2" ry="2"/>
+<text x="237.8" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.incrementPendingOutboundBytes (6 samples, 0.12%)</title><rect x="236.6" y="227.0" width="1.4" height="15" fill="#41d541" rx="2" ry="2"/>
+<text x="239.6" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioByteChannel.filterOutboundMessage (5 samples, 0.10%)</title><rect x="238.7" y="243.0" width="1.2" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="241.7" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/VertxHttpResponseEncoder.encode (342 samples, 6.71%)</title><rect x="240.1" y="339.0" width="79.2" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="243.1" y="350.0">io/vertx/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectEncoder.encode (340 samples, 6.67%)</title><rect x="240.6" y="323.0" width="78.7" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="243.6" y="334.0">io/netty/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpResponseEncoder.encodeInitialLine (164 samples, 3.22%)</title><rect x="240.8" y="307.0" width="38.0" height="15" fill="#39ce39" rx="2" ry="2"/>
+<text x="243.8" y="318.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpResponseEncoder.encodeInitialLine (164 samples, 3.22%)</title><rect x="240.8" y="291.0" width="38.0" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="243.8" y="302.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeByte (12 samples, 0.24%)</title><rect x="241.3" y="275.0" width="2.8" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="244.3" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.ensureWritable0 (11 samples, 0.22%)</title><rect x="241.3" y="259.0" width="2.5" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="244.3" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.ensureAccessible (8 samples, 0.16%)</title><rect x="241.7" y="243.0" width="1.9" height="15" fill="#39ce39" rx="2" ry="2"/>
+<text x="244.7" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractReferenceCountedByteBuf.isAccessible (5 samples, 0.10%)</title><rect x="241.7" y="227.0" width="1.2" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="244.7" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpResponseStatus.encode (68 samples, 1.33%)</title><rect x="244.1" y="275.0" width="15.7" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="247.1" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (68 samples, 1.33%)</title><rect x="244.1" y="259.0" width="15.7" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="247.1" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (66 samples, 1.29%)</title><rect x="244.5" y="243.0" width="15.3" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="247.5" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.ensureWritable (26 samples, 0.51%)</title><rect x="244.5" y="227.0" width="6.0" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="247.5" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.ensureWritable0 (24 samples, 0.47%)</title><rect x="245.0" y="211.0" width="5.5" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="248.0" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writableBytes (18 samples, 0.35%)</title><rect x="246.4" y="195.0" width="4.1" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="249.4" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledByteBuf.capacity (12 samples, 0.24%)</title><rect x="246.6" y="179.0" width="2.8" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="249.6" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jlong_disjoint_arraycopy (8 samples, 0.16%)</title><rect x="247.1" y="163.0" width="1.8" height="15" fill="#f97a7a" rx="2" ry="2"/>
+<text x="250.1" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledUnsafeDirectByteBuf.setBytes (40 samples, 0.78%)</title><rect x="250.5" y="227.0" width="9.3" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="253.5" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/UnsafeByteBufUtil.setBytes (40 samples, 0.78%)</title><rect x="250.5" y="211.0" width="9.3" height="15" fill="#3acf3a" rx="2" ry="2"/>
+<text x="253.5" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.checkIndex (11 samples, 0.22%)</title><rect x="251.7" y="195.0" width="2.5" height="15" fill="#6afc6a" rx="2" ry="2"/>
+<text x="254.7" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.ensureAccessible (8 samples, 0.16%)</title><rect x="252.4" y="179.0" width="1.8" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="255.4" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractReferenceCountedByteBuf.isAccessible (8 samples, 0.16%)</title><rect x="252.4" y="163.0" width="1.8" height="15" fill="#39cf39" rx="2" ry="2"/>
+<text x="255.4" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Math.min (8 samples, 0.16%)</title><rect x="252.4" y="147.0" width="1.8" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="255.4" y="158.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.encoderHeader (17 samples, 0.33%)</title><rect x="254.9" y="195.0" width="4.0" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="257.9" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpVersion.encode (82 samples, 1.61%)</title><rect x="259.8" y="275.0" width="19.0" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="262.8" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (66 samples, 1.29%)</title><rect x="263.5" y="259.0" width="15.3" height="15" fill="#36cb36" rx="2" ry="2"/>
+<text x="266.5" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (66 samples, 1.29%)</title><rect x="263.5" y="243.0" width="15.3" height="15" fill="#47dc47" rx="2" ry="2"/>
+<text x="266.5" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.ensureWritable (5 samples, 0.10%)</title><rect x="263.7" y="227.0" width="1.2" height="15" fill="#41d541" rx="2" ry="2"/>
+<text x="266.7" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledUnsafeDirectByteBuf.setBytes (60 samples, 1.18%)</title><rect x="264.9" y="227.0" width="13.9" height="15" fill="#3acf3a" rx="2" ry="2"/>
+<text x="267.9" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/UnsafeByteBufUtil.setBytes (59 samples, 1.16%)</title><rect x="265.1" y="211.0" width="13.7" height="15" fill="#60f360" rx="2" ry="2"/>
+<text x="268.1" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.checkIndex (38 samples, 0.75%)</title><rect x="265.4" y="195.0" width="8.8" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="268.4" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.checkIndex0 (30 samples, 0.59%)</title><rect x="265.4" y="179.0" width="6.9" height="15" fill="#46db46" rx="2" ry="2"/>
+<text x="268.4" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/MathUtil.isOutOfBounds (11 samples, 0.22%)</title><rect x="269.3" y="163.0" width="2.5" height="15" fill="#4de04d" rx="2" ry="2"/>
+<text x="272.3" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent.getInt (7 samples, 0.14%)</title><rect x="272.5" y="179.0" width="1.7" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="275.5" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent.copyMemory (20 samples, 0.39%)</title><rect x="274.2" y="195.0" width="4.6" height="15" fill="#69fb69" rx="2" ry="2"/>
+<text x="277.2" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent0.copyMemory (15 samples, 0.29%)</title><rect x="275.3" y="179.0" width="3.5" height="15" fill="#59eb59" rx="2" ry="2"/>
+<text x="278.3" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/PlatformDependent0.copyMemoryWithSafePointPolling (14 samples, 0.27%)</title><rect x="275.5" y="163.0" width="3.3" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="278.5" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/VertxHttpResponseEncoder.encodeHeaders (91 samples, 1.79%)</title><rect x="279.2" y="307.0" width="21.1" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="282.2" y="318.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.encode (91 samples, 1.79%)</title><rect x="279.2" y="291.0" width="21.1" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="282.2" y="302.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.encoderHeader (90 samples, 1.77%)</title><rect x="279.5" y="275.0" width="20.8" height="15" fill="#41d541" rx="2" ry="2"/>
+<text x="282.5" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/ByteBufUtil.setShortBE (52 samples, 1.02%)</title><rect x="282.0" y="259.0" width="12.1" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="285.0" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.setShort (52 samples, 1.02%)</title><rect x="282.0" y="243.0" width="12.1" height="15" fill="#4ee14e" rx="2" ry="2"/>
+<text x="285.0" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.checkIndex (47 samples, 0.92%)</title><rect x="282.0" y="227.0" width="10.9" height="15" fill="#50e350" rx="2" ry="2"/>
+<text x="285.0" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.checkIndex0 (42 samples, 0.82%)</title><rect x="282.0" y="211.0" width="9.7" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="285.0" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledByteBuf.capacity (38 samples, 0.75%)</title><rect x="282.9" y="195.0" width="8.8" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="285.9" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>jbyte_disjoint_arraycopy (27 samples, 0.53%)</title><rect x="284.1" y="179.0" width="6.3" height="15" fill="#f16e6e" rx="2" ry="2"/>
+<text x="287.1" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>unsafe_arraycopy (6 samples, 0.12%)</title><rect x="290.4" y="179.0" width="1.3" height="15" fill="#e15656" rx="2" ry="2"/>
+<text x="293.4" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.ensureAccessible (5 samples, 0.10%)</title><rect x="291.7" y="211.0" width="1.2" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="294.7" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractReferenceCountedByteBuf.isAccessible (5 samples, 0.10%)</title><rect x="291.7" y="195.0" width="1.2" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="294.7" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledUnsafeDirectByteBuf._setShort (5 samples, 0.10%)</title><rect x="292.9" y="227.0" width="1.2" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="295.9" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/AsciiString.length (14 samples, 0.27%)</title><rect x="294.1" y="259.0" width="3.2" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="297.1" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.writeAscii (13 samples, 0.26%)</title><rect x="297.3" y="259.0" width="3.0" height="15" fill="#5bed5b" rx="2" ry="2"/>
+<text x="300.3" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/ByteBufUtil.copy (13 samples, 0.26%)</title><rect x="297.3" y="243.0" width="3.0" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="300.3" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledUnsafeDirectByteBuf.setBytes (6 samples, 0.12%)</title><rect x="297.3" y="227.0" width="1.4" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="300.3" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/UnsafeByteBufUtil.setBytes (6 samples, 0.12%)</title><rect x="297.3" y="211.0" width="1.4" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="300.3" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/PartialPooledByteBufAllocator$ForceDirectPoooledByteBufAllocator.buffer (82 samples, 1.61%)</title><rect x="300.3" y="307.0" width="19.0" height="15" fill="#65f665" rx="2" ry="2"/>
+<text x="303.3" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/PartialPooledByteBufAllocator.directBuffer (82 samples, 1.61%)</title><rect x="300.3" y="291.0" width="19.0" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="303.3" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBufAllocator.directBuffer (82 samples, 1.61%)</title><rect x="300.3" y="275.0" width="19.0" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="303.3" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBufAllocator.directBuffer (82 samples, 1.61%)</title><rect x="300.3" y="259.0" width="19.0" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="303.3" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledByteBufAllocator.newDirectBuffer (82 samples, 1.61%)</title><rect x="300.3" y="243.0" width="19.0" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="303.3" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBufAllocator.toLeakAwareBuffer (17 samples, 0.33%)</title><rect x="300.8" y="227.0" width="3.9" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="303.8" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolArena.allocate (58 samples, 1.14%)</title><rect x="304.7" y="227.0" width="13.4" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="307.7" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolArena$DirectArena.newByteBuf (14 samples, 0.27%)</title><rect x="305.2" y="211.0" width="3.2" height="15" fill="#66f866" rx="2" ry="2"/>
+<text x="308.2" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledUnsafeDirectByteBuf.newInstance (14 samples, 0.27%)</title><rect x="305.2" y="195.0" width="3.2" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="308.2" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/Recycler.get (8 samples, 0.16%)</title><rect x="306.6" y="179.0" width="1.8" height="15" fill="#5df05d" rx="2" ry="2"/>
+<text x="309.6" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/FastThreadLocal.get (5 samples, 0.10%)</title><rect x="307.3" y="163.0" width="1.1" height="15" fill="#66f766" rx="2" ry="2"/>
+<text x="310.3" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolArena.allocate (42 samples, 0.82%)</title><rect x="308.4" y="211.0" width="9.7" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="311.4" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache.allocateTiny (42 samples, 0.82%)</title><rect x="308.4" y="195.0" width="9.7" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="311.4" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache.allocate (41 samples, 0.80%)</title><rect x="308.4" y="179.0" width="9.5" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="311.4" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache$MemoryRegionCache.allocate (38 samples, 0.75%)</title><rect x="309.1" y="163.0" width="8.8" height="15" fill="#5ef05e" rx="2" ry="2"/>
+<text x="312.1" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache$SubPageMemoryRegionCache.initBuf (10 samples, 0.20%)</title><rect x="314.9" y="147.0" width="2.3" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="317.9" y="158.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolChunk.initBufWithSubpage (10 samples, 0.20%)</title><rect x="314.9" y="131.0" width="2.3" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="317.9" y="142.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolChunk.initBufWithSubpage (10 samples, 0.20%)</title><rect x="314.9" y="115.0" width="2.3" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="317.9" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/FastThreadLocal.get (5 samples, 0.10%)</title><rect x="318.1" y="227.0" width="1.2" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="321.1" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/HttpServerResponseImpl.prepareHeaders (9 samples, 0.18%)</title><rect x="319.3" y="467.0" width="2.1" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="322.3" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.contains (5 samples, 0.10%)</title><rect x="319.5" y="451.0" width="1.2" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="322.5" y="462.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.get0 (5 samples, 0.10%)</title><rect x="319.5" y="435.0" width="1.2" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="322.5" y="446.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/ConnectionBase.flush (3,059 samples, 60.02%)</title><rect x="321.4" y="467.0" width="708.2" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="324.4" y="478.0">io/vertx/core/net/impl/ConnectionBase.flush</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/ConnectionBase.flush (3,053 samples, 59.90%)</title><rect x="322.8" y="451.0" width="706.8" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="325.8" y="462.0">io/vertx/core/net/impl/ConnectionBase.flush</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (5 samples, 0.10%)</title><rect x="326.5" y="435.0" width="1.1" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="329.5" y="446.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.writeAndFlush (3,032 samples, 59.49%)</title><rect x="327.6" y="435.0" width="702.0" height="15" fill="#68fa68" rx="2" ry="2"/>
+<text x="330.6" y="446.0">io/netty/channel/AbstractChannelHandlerContext.writeAndFlush</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (3,032 samples, 59.49%)</title><rect x="327.6" y="419.0" width="702.0" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="330.6" y="430.0">io/netty/channel/AbstractChannelHandlerContext.write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWriteAndFlush (3,028 samples, 59.41%)</title><rect x="328.6" y="403.0" width="701.0" height="15" fill="#67f867" rx="2" ry="2"/>
+<text x="331.6" y="414.0">io/netty/channel/AbstractChannelHandlerContext.invokeWriteAndFlush</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (2,897 samples, 56.84%)</title><rect x="328.6" y="387.0" width="670.6" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="331.6" y="398.0">io/netty/channel/AbstractChannelHandlerContext.invokeFlush0</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundHandlerAdapter.flush (2,894 samples, 56.78%)</title><rect x="329.0" y="371.0" width="670.0" height="15" fill="#3acf3a" rx="2" ry="2"/>
+<text x="332.0" y="382.0">io/netty/channel/ChannelOutboundHandlerAdapter.flush</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.flush (2,894 samples, 56.78%)</title><rect x="329.0" y="355.0" width="670.0" height="15" fill="#4de04d" rx="2" ry="2"/>
+<text x="332.0" y="366.0">io/netty/channel/AbstractChannelHandlerContext.flush</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (2,890 samples, 56.70%)</title><rect x="329.5" y="339.0" width="669.0" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="332.5" y="350.0">io/netty/channel/AbstractChannelHandlerContext.invokeFlush</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (2,890 samples, 56.70%)</title><rect x="329.5" y="323.0" width="669.0" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="332.5" y="334.0">io/netty/channel/AbstractChannelHandlerContext.invokeFlush0</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.flush (2,889 samples, 56.68%)</title><rect x="329.7" y="307.0" width="668.8" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="332.7" y="318.0">io/netty/channel/DefaultChannelPipeline$HeadContext.flush</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush (2,889 samples, 56.68%)</title><rect x="329.7" y="291.0" width="668.8" height="15" fill="#44d944" rx="2" ry="2"/>
+<text x="332.7" y="302.0">io/netty/channel/AbstractChannel$AbstractUnsafe.flush</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioChannel$AbstractNioUnsafe.flush0 (2,888 samples, 56.66%)</title><rect x="329.9" y="275.0" width="668.6" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="332.9" y="286.0">io/netty/channel/nio/AbstractNioChannel$AbstractNioUnsafe.flush0</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush0 (2,888 samples, 56.66%)</title><rect x="329.9" y="259.0" width="668.6" height="15" fill="#66f866" rx="2" ry="2"/>
+<text x="332.9" y="270.0">io/netty/channel/AbstractChannel$AbstractUnsafe.flush0</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.doWrite (2,870 samples, 56.31%)</title><rect x="329.9" y="243.0" width="664.5" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="332.9" y="254.0">io/netty/channel/socket/nio/NioSocketChannel.doWrite</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.nioBuffers (20 samples, 0.39%)</title><rect x="331.8" y="227.0" width="4.6" height="15" fill="#4ee14e" rx="2" ry="2"/>
+<text x="334.8" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.removeBytes (193 samples, 3.79%)</title><rect x="336.4" y="227.0" width="44.7" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="339.4" y="238.0">io/n..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.progress (6 samples, 0.12%)</title><rect x="348.0" y="211.0" width="1.4" height="15" fill="#47dc47" rx="2" ry="2"/>
+<text x="351.0" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.remove (137 samples, 2.69%)</title><rect x="349.4" y="211.0" width="31.7" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="352.4" y="222.0">io..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer$Entry.recycle (6 samples, 0.12%)</title><rect x="350.1" y="195.0" width="1.4" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="353.1" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.decrementPendingOutboundBytes (14 samples, 0.27%)</title><rect x="351.5" y="195.0" width="3.2" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="354.5" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.setWritable (6 samples, 0.12%)</title><rect x="353.1" y="179.0" width="1.4" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="356.1" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/concurrent/atomic/AtomicIntegerFieldUpdater$AtomicIntegerFieldUpdaterImpl.compareAndSet (6 samples, 0.12%)</title><rect x="353.1" y="163.0" width="1.4" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="356.1" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.removeEntry (7 samples, 0.14%)</title><rect x="354.7" y="195.0" width="1.6" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="357.7" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.safeSuccess (41 samples, 0.80%)</title><rect x="356.3" y="195.0" width="9.5" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="359.3" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractReferenceCountedByteBuf.release (12 samples, 0.24%)</title><rect x="356.6" y="179.0" width="2.7" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="359.6" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/EmptyByteBuf.release (9 samples, 0.18%)</title><rect x="359.3" y="179.0" width="2.1" height="15" fill="#5df05d" rx="2" ry="2"/>
+<text x="362.3" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>itable stub (19 samples, 0.37%)</title><rect x="361.4" y="179.0" width="4.4" height="15" fill="#d94b4b" rx="2" ry="2"/>
+<text x="364.4" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/ReferenceCountUtil.safeRelease (66 samples, 1.29%)</title><rect x="365.8" y="195.0" width="15.3" height="15" fill="#4bde4b" rx="2" ry="2"/>
+<text x="368.8" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/ReferenceCountUtil.release (66 samples, 1.29%)</title><rect x="365.8" y="179.0" width="15.3" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="368.8" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractReferenceCountedByteBuf.release (64 samples, 1.26%)</title><rect x="366.3" y="163.0" width="14.8" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="369.3" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractReferenceCountedByteBuf.release0 (64 samples, 1.26%)</title><rect x="366.3" y="147.0" width="14.8" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="369.3" y="158.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledByteBuf.deallocate (61 samples, 1.20%)</title><rect x="366.3" y="131.0" width="14.1" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="369.3" y="142.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolArena.free (48 samples, 0.94%)</title><rect x="367.7" y="115.0" width="11.1" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="370.7" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache.add (47 samples, 0.92%)</title><rect x="367.9" y="99.0" width="10.9" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="370.9" y="110.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache$MemoryRegionCache.add (23 samples, 0.45%)</title><rect x="367.9" y="83.0" width="5.3" height="15" fill="#37cd37" rx="2" ry="2"/>
+<text x="370.9" y="94.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache$MemoryRegionCache.newEntry (17 samples, 0.33%)</title><rect x="367.9" y="67.0" width="3.9" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="370.9" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/Recycler.get (12 samples, 0.24%)</title><rect x="369.1" y="51.0" width="2.7" height="15" fill="#5ff25f" rx="2" ry="2"/>
+<text x="372.1" y="62.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/FastThreadLocal.get (5 samples, 0.10%)</title><rect x="370.7" y="35.0" width="1.1" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="373.7" y="46.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/shaded/org/jctools/queues/MpscArrayQueue.offer (6 samples, 0.12%)</title><rect x="371.8" y="67.0" width="1.4" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="374.8" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache.cache (24 samples, 0.47%)</title><rect x="373.2" y="83.0" width="5.6" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="376.2" y="94.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache.cacheForTiny (8 samples, 0.16%)</title><rect x="375.8" y="67.0" width="1.8" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="378.8" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache.cache (8 samples, 0.16%)</title><rect x="375.8" y="51.0" width="1.8" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="378.8" y="62.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Enum.ordinal (5 samples, 0.10%)</title><rect x="377.6" y="67.0" width="1.2" height="15" fill="#6bfc6b" rx="2" ry="2"/>
+<text x="380.6" y="78.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledByteBuf.recycle (7 samples, 0.14%)</title><rect x="378.8" y="115.0" width="1.6" height="15" fill="#6afc6a" rx="2" ry="2"/>
+<text x="381.8" y="126.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/Recycler$DefaultHandle.recycle (6 samples, 0.12%)</title><rect x="379.0" y="99.0" width="1.4" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="382.0" y="110.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/Recycler$Stack.push (5 samples, 0.10%)</title><rect x="379.3" y="83.0" width="1.1" height="15" fill="#42d642" rx="2" ry="2"/>
+<text x="382.3" y="94.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.write (2,647 samples, 51.93%)</title><rect x="381.6" y="227.0" width="612.8" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="384.6" y="238.0">sun/nio/ch/SocketChannelImpl.write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/spi/AbstractInterruptibleChannel.begin (40 samples, 0.78%)</title><rect x="388.5" y="211.0" width="9.3" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="391.5" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Thread.isInterrupted (10 samples, 0.20%)</title><rect x="388.5" y="195.0" width="2.3" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="391.5" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/spi/AbstractInterruptibleChannel.blockedOn (30 samples, 0.59%)</title><rect x="390.8" y="195.0" width="7.0" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="393.8" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/System$2.blockedOn (6 samples, 0.12%)</title><rect x="396.2" y="179.0" width="1.3" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="399.2" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Thread.blockedOn (6 samples, 0.12%)</title><rect x="396.2" y="163.0" width="1.3" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="399.2" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/spi/AbstractInterruptibleChannel.end (28 samples, 0.55%)</title><rect x="397.8" y="211.0" width="6.5" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="400.8" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/spi/AbstractInterruptibleChannel.blockedOn (26 samples, 0.51%)</title><rect x="398.2" y="195.0" width="6.1" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="401.2" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/System$2.blockedOn (11 samples, 0.22%)</title><rect x="401.5" y="179.0" width="2.5" height="15" fill="#3dd23d" rx="2" ry="2"/>
+<text x="404.5" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/lang/Thread.blockedOn (11 samples, 0.22%)</title><rect x="401.5" y="163.0" width="2.5" height="15" fill="#6cfe6c" rx="2" ry="2"/>
+<text x="404.5" y="174.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.write (2,482 samples, 48.70%)</title><rect x="404.3" y="211.0" width="574.6" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="407.3" y="222.0">sun/nio/ch/IOUtil.write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.writeFromNativeBuffer (2,480 samples, 48.66%)</title><rect x="404.7" y="195.0" width="574.2" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="407.7" y="206.0">sun/nio/ch/IOUtil.writeFromNativeBuffer</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/Buffer.position (17 samples, 0.33%)</title><rect x="406.3" y="179.0" width="4.0" height="15" fill="#3acf3a" rx="2" ry="2"/>
+<text x="409.3" y="190.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.write (2,455 samples, 48.17%)</title><rect x="410.5" y="179.0" width="568.4" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="413.5" y="190.0">sun/nio/ch/SocketDispatcher.write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.write0 (2,454 samples, 48.15%)</title><rect x="410.7" y="163.0" width="568.2" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="413.7" y="174.0">sun/nio/ch/FileDispatcherImpl.write0</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>Java_sun_nio_ch_FileDispatcherImpl_write0 (38 samples, 0.75%)</title><rect x="422.3" y="147.0" width="8.8" height="15" fill="#d14040" rx="2" ry="2"/>
+<text x="425.3" y="158.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>write (2,365 samples, 46.40%)</title><rect x="431.3" y="147.0" width="547.6" height="15" fill="#f57474" rx="2" ry="2"/>
+<text x="434.3" y="158.0">write</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/NativeThread.current (36 samples, 0.71%)</title><rect x="978.9" y="211.0" width="8.3" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="981.9" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>pthread_self (25 samples, 0.49%)</title><rect x="981.4" y="195.0" width="5.8" height="15" fill="#fe8181" rx="2" ry="2"/>
+<text x="984.4" y="206.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.ensureWriteOpen (20 samples, 0.39%)</title><rect x="987.2" y="211.0" width="4.6" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="990.2" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.writerCleanup (11 samples, 0.22%)</title><rect x="991.8" y="211.0" width="2.6" height="15" fill="#40d440" rx="2" ry="2"/>
+<text x="994.8" y="222.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.isActive (18 samples, 0.35%)</title><rect x="994.4" y="243.0" width="4.1" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="997.4" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.isConnected (15 samples, 0.29%)</title><rect x="995.1" y="227.0" width="3.4" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="998.1" y="238.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (131 samples, 2.57%)</title><rect x="999.2" y="387.0" width="30.4" height="15" fill="#58ea58" rx="2" ry="2"/>
+<text x="1002.2" y="398.0">io..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.write (48 samples, 0.94%)</title><rect x="999.5" y="371.0" width="11.1" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="1002.5" y="382.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.write (48 samples, 0.94%)</title><rect x="999.5" y="355.0" width="11.1" height="15" fill="#61f361" rx="2" ry="2"/>
+<text x="1002.5" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.addMessage (47 samples, 0.92%)</title><rect x="999.5" y="339.0" width="10.8" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="1002.5" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer$Entry.newInstance (37 samples, 0.73%)</title><rect x="999.5" y="323.0" width="8.5" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="1002.5" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/Recycler.get (36 samples, 0.71%)</title><rect x="999.7" y="307.0" width="8.3" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="1002.7" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/Recycler$Stack.pop (10 samples, 0.20%)</title><rect x="1000.4" y="291.0" width="2.3" height="15" fill="#58ea58" rx="2" ry="2"/>
+<text x="1003.4" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SelectionKeyImpl.interestOps (5 samples, 0.10%)</title><rect x="1001.6" y="275.0" width="1.1" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="1004.6" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/concurrent/FastThreadLocal.get (23 samples, 0.45%)</title><rect x="1002.7" y="291.0" width="5.3" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="1005.7" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/EmptyByteBuf.isDirect (5 samples, 0.10%)</title><rect x="1002.9" y="275.0" width="1.2" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="1005.9" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/InternalThreadLocalMap.get (8 samples, 0.16%)</title><rect x="1004.1" y="275.0" width="1.9" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="1007.1" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/EmptyByteBuf.release (7 samples, 0.14%)</title><rect x="1004.1" y="259.0" width="1.6" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="1007.1" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/internal/InternalThreadLocalMap.indexedVariable (9 samples, 0.18%)</title><rect x="1006.0" y="275.0" width="2.0" height="15" fill="#39ce39" rx="2" ry="2"/>
+<text x="1009.0" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.incrementPendingOutboundBytes (8 samples, 0.16%)</title><rect x="1008.0" y="323.0" width="1.9" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="1011.0" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageEncoder.write (82 samples, 1.61%)</title><rect x="1010.6" y="371.0" width="19.0" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="1013.6" y="382.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (37 samples, 0.73%)</title><rect x="1014.1" y="355.0" width="8.5" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="1017.1" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (37 samples, 0.73%)</title><rect x="1014.1" y="339.0" width="8.5" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="1017.1" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (33 samples, 0.65%)</title><rect x="1015.0" y="323.0" width="7.6" height="15" fill="#45da45" rx="2" ry="2"/>
+<text x="1018.0" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (33 samples, 0.65%)</title><rect x="1015.0" y="307.0" width="7.6" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="1018.0" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.write (25 samples, 0.49%)</title><rect x="1015.2" y="291.0" width="5.8" height="15" fill="#3acf3a" rx="2" ry="2"/>
+<text x="1018.2" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.write (25 samples, 0.49%)</title><rect x="1015.2" y="275.0" width="5.8" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="1018.2" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.addMessage (22 samples, 0.43%)</title><rect x="1015.4" y="259.0" width="5.1" height="15" fill="#4fe24f" rx="2" ry="2"/>
+<text x="1018.4" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer$Entry.newInstance (8 samples, 0.16%)</title><rect x="1016.4" y="243.0" width="1.8" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="1019.4" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.total (8 samples, 0.16%)</title><rect x="1018.7" y="243.0" width="1.8" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="1021.7" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageEncoder.write (7 samples, 0.14%)</title><rect x="1021.0" y="291.0" width="1.6" height="15" fill="#53e653" rx="2" ry="2"/>
+<text x="1024.0" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/CodecOutputList.newInstance (6 samples, 0.12%)</title><rect x="1024.0" y="355.0" width="1.4" height="15" fill="#5ef05e" rx="2" ry="2"/>
+<text x="1027.0" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpResponseEncoder.acceptOutboundMessage (10 samples, 0.20%)</title><rect x="1025.6" y="355.0" width="2.3" height="15" fill="#44d944" rx="2" ry="2"/>
+<text x="1028.6" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/VertxHttpResponseEncoder.encode (7 samples, 0.14%)</title><rect x="1027.9" y="355.0" width="1.7" height="15" fill="#3acf3a" rx="2" ry="2"/>
+<text x="1030.9" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectEncoder.encode (7 samples, 0.14%)</title><rect x="1027.9" y="339.0" width="1.7" height="15" fill="#51e551" rx="2" ry="2"/>
+<text x="1030.9" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpResponseEncoder.encodeInitialLine (6 samples, 0.12%)</title><rect x="1028.2" y="323.0" width="1.4" height="15" fill="#44d944" rx="2" ry="2"/>
+<text x="1031.2" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpResponseEncoder.encodeInitialLine (6 samples, 0.12%)</title><rect x="1028.2" y="307.0" width="1.4" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="1031.2" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.add (24 samples, 0.47%)</title><rect x="1029.6" y="499.0" width="5.5" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="1032.6" y="510.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.add (22 samples, 0.43%)</title><rect x="1030.0" y="483.0" width="5.1" height="15" fill="#4bdf4b" rx="2" ry="2"/>
+<text x="1033.0" y="494.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/util/AsciiString.hashCode (7 samples, 0.14%)</title><rect x="1030.5" y="467.0" width="1.6" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="1033.5" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.add0 (13 samples, 0.26%)</title><rect x="1032.1" y="467.0" width="3.0" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="1035.1" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline.touch (5 samples, 0.10%)</title><rect x="1035.1" y="659.0" width="1.2" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="1038.1" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/ByteToMessageDecoder.fireChannelRead (221 samples, 4.34%)</title><rect x="1037.4" y="739.0" width="51.2" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="1040.4" y="750.0">io/ne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.fireChannelRead (220 samples, 4.32%)</title><rect x="1037.7" y="723.0" width="50.9" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="1040.7" y="734.0">io/ne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (219 samples, 4.30%)</title><rect x="1037.9" y="707.0" width="50.7" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="1040.9" y="718.0">io/ne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelRead (219 samples, 4.30%)</title><rect x="1037.9" y="691.0" width="50.7" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="1040.9" y="702.0">io/ne..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/VertxHandler.channelRead (219 samples, 4.30%)</title><rect x="1037.9" y="675.0" width="50.7" height="15" fill="#36cc36" rx="2" ry="2"/>
+<text x="1040.9" y="686.0">io/ve..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/impl/ContextImpl.executeFromIO (219 samples, 4.30%)</title><rect x="1037.9" y="659.0" width="50.7" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="1040.9" y="670.0">io/ve..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/impl/EventLoopContext.execute (219 samples, 4.30%)</title><rect x="1037.9" y="643.0" width="50.7" height="15" fill="#41d541" rx="2" ry="2"/>
+<text x="1040.9" y="654.0">io/ve..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/impl/ContextImpl.executeTask (219 samples, 4.30%)</title><rect x="1037.9" y="627.0" width="50.7" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="1040.9" y="638.0">io/ve..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/VertxHandler$$Lambda$62/348673736.handle (216 samples, 4.24%)</title><rect x="1038.6" y="611.0" width="50.0" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="1041.6" y="622.0">io/ve..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/Http1xServerConnection.handleMessage (216 samples, 4.24%)</title><rect x="1038.6" y="595.0" width="50.0" height="15" fill="#50e450" rx="2" ry="2"/>
+<text x="1041.6" y="606.0">io/ve..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/HttpServerRequestImpl.handleBegin (216 samples, 4.24%)</title><rect x="1038.6" y="579.0" width="50.0" height="15" fill="#5df05d" rx="2" ry="2"/>
+<text x="1041.6" y="590.0">io/ve..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/perf/core/http/SimpleServer.handle (212 samples, 4.16%)</title><rect x="1039.5" y="563.0" width="49.1" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="1042.5" y="574.0">io/ve..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/perf/core/http/SimpleServer.handle (212 samples, 4.16%)</title><rect x="1039.5" y="547.0" width="49.1" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="1042.5" y="558.0">io/ve..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/HttpServerResponseImpl.end (207 samples, 4.06%)</title><rect x="1039.5" y="531.0" width="47.9" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="1042.5" y="542.0">io/v..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/HttpServerResponseImpl.end (207 samples, 4.06%)</title><rect x="1039.5" y="515.0" width="47.9" height="15" fill="#6afb6a" rx="2" ry="2"/>
+<text x="1042.5" y="526.0">io/v..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/Http1xServerConnection.writeToChannel (26 samples, 0.51%)</title><rect x="1039.8" y="499.0" width="6.0" height="15" fill="#45d945" rx="2" ry="2"/>
+<text x="1042.8" y="510.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/ConnectionBase.writeToChannel (26 samples, 0.51%)</title><rect x="1039.8" y="483.0" width="6.0" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="1042.8" y="494.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/ConnectionBase.write (24 samples, 0.47%)</title><rect x="1040.2" y="467.0" width="5.6" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="1043.2" y="478.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (24 samples, 0.47%)</title><rect x="1040.2" y="451.0" width="5.6" height="15" fill="#59ec59" rx="2" ry="2"/>
+<text x="1043.2" y="462.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (24 samples, 0.47%)</title><rect x="1040.2" y="435.0" width="5.6" height="15" fill="#4ade4a" rx="2" ry="2"/>
+<text x="1043.2" y="446.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite (21 samples, 0.41%)</title><rect x="1040.9" y="419.0" width="4.9" height="15" fill="#56e956" rx="2" ry="2"/>
+<text x="1043.9" y="430.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (21 samples, 0.41%)</title><rect x="1040.9" y="403.0" width="4.9" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="1043.9" y="414.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/MessageToMessageEncoder.write (20 samples, 0.39%)</title><rect x="1041.1" y="387.0" width="4.7" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="1044.1" y="398.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/VertxHttpResponseEncoder.encode (16 samples, 0.31%)</title><rect x="1042.1" y="371.0" width="3.7" height="15" fill="#5aec5a" rx="2" ry="2"/>
+<text x="1045.1" y="382.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpObjectEncoder.encode (16 samples, 0.31%)</title><rect x="1042.1" y="355.0" width="3.7" height="15" fill="#46da46" rx="2" ry="2"/>
+<text x="1045.1" y="366.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpResponseEncoder.encodeInitialLine (7 samples, 0.14%)</title><rect x="1042.1" y="339.0" width="1.6" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="1045.1" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/handler/codec/http/HttpResponseEncoder.encodeInitialLine (7 samples, 0.14%)</title><rect x="1042.1" y="323.0" width="1.6" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="1045.1" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/VertxHttpResponseEncoder.encodeHeaders (6 samples, 0.12%)</title><rect x="1043.9" y="339.0" width="1.4" height="15" fill="#63f563" rx="2" ry="2"/>
+<text x="1046.9" y="350.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.encode (6 samples, 0.12%)</title><rect x="1043.9" y="323.0" width="1.4" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="1046.9" y="334.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.encoderHeader (6 samples, 0.12%)</title><rect x="1043.9" y="307.0" width="1.4" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="1046.9" y="318.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/ByteBufUtil.setShortBE (5 samples, 0.10%)</title><rect x="1043.9" y="291.0" width="1.2" height="15" fill="#58eb58" rx="2" ry="2"/>
+<text x="1046.9" y="302.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.setShort (5 samples, 0.10%)</title><rect x="1043.9" y="275.0" width="1.2" height="15" fill="#52e652" rx="2" ry="2"/>
+<text x="1046.9" y="286.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/ConnectionBase.flush (180 samples, 3.53%)</title><rect x="1045.8" y="499.0" width="41.6" height="15" fill="#69fa69" rx="2" ry="2"/>
+<text x="1048.8" y="510.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/ConnectionBase.flush (180 samples, 3.53%)</title><rect x="1045.8" y="483.0" width="41.6" height="15" fill="#41d641" rx="2" ry="2"/>
+<text x="1048.8" y="494.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.writeAndFlush (179 samples, 3.51%)</title><rect x="1046.0" y="467.0" width="41.4" height="15" fill="#6cfd6c" rx="2" ry="2"/>
+<text x="1049.0" y="478.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.write (179 samples, 3.51%)</title><rect x="1046.0" y="451.0" width="41.4" height="15" fill="#40d540" rx="2" ry="2"/>
+<text x="1049.0" y="462.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWriteAndFlush (179 samples, 3.51%)</title><rect x="1046.0" y="435.0" width="41.4" height="15" fill="#64f664" rx="2" ry="2"/>
+<text x="1049.0" y="446.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (172 samples, 3.37%)</title><rect x="1046.0" y="419.0" width="39.8" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="1049.0" y="430.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundHandlerAdapter.flush (172 samples, 3.37%)</title><rect x="1046.0" y="403.0" width="39.8" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="1049.0" y="414.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.flush (172 samples, 3.37%)</title><rect x="1046.0" y="387.0" width="39.8" height="15" fill="#63f463" rx="2" ry="2"/>
+<text x="1049.0" y="398.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush (171 samples, 3.35%)</title><rect x="1046.0" y="371.0" width="39.6" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="1049.0" y="382.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeFlush0 (171 samples, 3.35%)</title><rect x="1046.0" y="355.0" width="39.6" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="1049.0" y="366.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.flush (171 samples, 3.35%)</title><rect x="1046.0" y="339.0" width="39.6" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="1049.0" y="350.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush (171 samples, 3.35%)</title><rect x="1046.0" y="323.0" width="39.6" height="15" fill="#5cee5c" rx="2" ry="2"/>
+<text x="1049.0" y="334.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioChannel$AbstractNioUnsafe.flush0 (171 samples, 3.35%)</title><rect x="1046.0" y="307.0" width="39.6" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="1049.0" y="318.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel$AbstractUnsafe.flush0 (171 samples, 3.35%)</title><rect x="1046.0" y="291.0" width="39.6" height="15" fill="#54e854" rx="2" ry="2"/>
+<text x="1049.0" y="302.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.doWrite (170 samples, 3.34%)</title><rect x="1046.0" y="275.0" width="39.4" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="1049.0" y="286.0">io/..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.removeBytes (13 samples, 0.26%)</title><rect x="1046.9" y="259.0" width="3.0" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="1049.9" y="270.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundBuffer.remove (7 samples, 0.14%)</title><rect x="1048.3" y="243.0" width="1.6" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="1051.3" y="254.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.write (152 samples, 2.98%)</title><rect x="1050.2" y="259.0" width="35.2" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="1053.2" y="270.0">sun..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.write (139 samples, 2.73%)</title><rect x="1050.9" y="243.0" width="32.1" height="15" fill="#5ff15f" rx="2" ry="2"/>
+<text x="1053.9" y="254.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.writeFromNativeBuffer (139 samples, 2.73%)</title><rect x="1050.9" y="227.0" width="32.1" height="15" fill="#3cd13c" rx="2" ry="2"/>
+<text x="1053.9" y="238.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.write (138 samples, 2.71%)</title><rect x="1051.1" y="211.0" width="31.9" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="1054.1" y="222.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.write0 (138 samples, 2.71%)</title><rect x="1051.1" y="195.0" width="31.9" height="15" fill="#4fe34f" rx="2" ry="2"/>
+<text x="1054.1" y="206.0">su..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>write (135 samples, 2.65%)</title><rect x="1051.8" y="179.0" width="31.2" height="15" fill="#cc3838" rx="2" ry="2"/>
+<text x="1054.8" y="190.0">wr..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeWrite0 (7 samples, 0.14%)</title><rect x="1085.8" y="419.0" width="1.6" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="1088.8" y="430.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.add (5 samples, 0.10%)</title><rect x="1087.4" y="531.0" width="1.2" height="15" fill="#68f968" rx="2" ry="2"/>
+<text x="1090.4" y="542.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/http/impl/headers/VertxHttpHeaders.add (5 samples, 0.10%)</title><rect x="1087.4" y="515.0" width="1.2" height="15" fill="#60f360" rx="2" ry="2"/>
+<text x="1090.4" y="526.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline.fireChannelReadComplete (11 samples, 0.22%)</title><rect x="1088.6" y="867.0" width="2.5" height="15" fill="#5ef15e" rx="2" ry="2"/>
+<text x="1091.6" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelReadComplete (11 samples, 0.22%)</title><rect x="1088.6" y="851.0" width="2.5" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="1091.6" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeChannelReadComplete (11 samples, 0.22%)</title><rect x="1088.6" y="835.0" width="2.5" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="1091.6" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.channelReadComplete (11 samples, 0.22%)</title><rect x="1088.6" y="819.0" width="2.5" height="15" fill="#55e855" rx="2" ry="2"/>
+<text x="1091.6" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline$HeadContext.readIfIsAutoRead (8 samples, 0.16%)</title><rect x="1089.3" y="803.0" width="1.8" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="1092.3" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannel.read (8 samples, 0.16%)</title><rect x="1089.3" y="787.0" width="1.8" height="15" fill="#36cb36" rx="2" ry="2"/>
+<text x="1092.3" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultChannelPipeline.read (8 samples, 0.16%)</title><rect x="1089.3" y="771.0" width="1.8" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="1092.3" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.read (8 samples, 0.16%)</title><rect x="1089.3" y="755.0" width="1.8" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="1092.3" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeRead (7 samples, 0.14%)</title><rect x="1089.5" y="739.0" width="1.6" height="15" fill="#3ed33e" rx="2" ry="2"/>
+<text x="1092.5" y="750.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelDuplexHandler.read (5 samples, 0.10%)</title><rect x="1090.0" y="723.0" width="1.1" height="15" fill="#49dd49" rx="2" ry="2"/>
+<text x="1093.0" y="734.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.read (5 samples, 0.10%)</title><rect x="1090.0" y="707.0" width="1.1" height="15" fill="#57ea57" rx="2" ry="2"/>
+<text x="1093.0" y="718.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.invokeRead (5 samples, 0.10%)</title><rect x="1090.0" y="691.0" width="1.1" height="15" fill="#59ec59" rx="2" ry="2"/>
+<text x="1093.0" y="702.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/ChannelOutboundHandlerAdapter.read (5 samples, 0.10%)</title><rect x="1090.0" y="675.0" width="1.1" height="15" fill="#5cef5c" rx="2" ry="2"/>
+<text x="1093.0" y="686.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/AbstractChannelHandlerContext.read (5 samples, 0.10%)</title><rect x="1090.0" y="659.0" width="1.1" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="1093.0" y="670.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/DefaultMaxMessagesRecvByteBufAllocator$MaxMessageHandle.allocate (13 samples, 0.26%)</title><rect x="1091.1" y="867.0" width="3.1" height="15" fill="#42d742" rx="2" ry="2"/>
+<text x="1094.1" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/vertx/core/net/impl/PartialPooledByteBufAllocator.ioBuffer (10 samples, 0.20%)</title><rect x="1091.8" y="851.0" width="2.4" height="15" fill="#62f462" rx="2" ry="2"/>
+<text x="1094.8" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBufAllocator.directBuffer (10 samples, 0.20%)</title><rect x="1091.8" y="835.0" width="2.4" height="15" fill="#48dc48" rx="2" ry="2"/>
+<text x="1094.8" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBufAllocator.directBuffer (10 samples, 0.20%)</title><rect x="1091.8" y="819.0" width="2.4" height="15" fill="#5bed5b" rx="2" ry="2"/>
+<text x="1094.8" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledByteBufAllocator.newDirectBuffer (10 samples, 0.20%)</title><rect x="1091.8" y="803.0" width="2.4" height="15" fill="#44d944" rx="2" ry="2"/>
+<text x="1094.8" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolArena.allocate (8 samples, 0.16%)</title><rect x="1092.1" y="787.0" width="1.8" height="15" fill="#32c832" rx="2" ry="2"/>
+<text x="1095.1" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolArena.allocate (5 samples, 0.10%)</title><rect x="1092.8" y="771.0" width="1.1" height="15" fill="#38cd38" rx="2" ry="2"/>
+<text x="1095.8" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PoolThreadCache.allocateNormal (5 samples, 0.10%)</title><rect x="1092.8" y="755.0" width="1.1" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="1095.8" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/AbstractNioByteChannel.shouldBreakReadReady (9 samples, 0.18%)</title><rect x="1094.4" y="867.0" width="2.1" height="15" fill="#60f260" rx="2" ry="2"/>
+<text x="1097.4" y="878.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.isInputShutdown0 (9 samples, 0.18%)</title><rect x="1094.4" y="851.0" width="2.1" height="15" fill="#3fd43f" rx="2" ry="2"/>
+<text x="1097.4" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.isInputShutdown (9 samples, 0.18%)</title><rect x="1094.4" y="835.0" width="2.1" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="1097.4" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.socket (5 samples, 0.10%)</title><rect x="1095.3" y="819.0" width="1.2" height="15" fill="#36cb36" rx="2" ry="2"/>
+<text x="1098.3" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/socket/nio/NioSocketChannel.doReadBytes (93 samples, 1.82%)</title><rect x="1096.5" y="867.0" width="21.5" height="15" fill="#3bd03b" rx="2" ry="2"/>
+<text x="1099.5" y="878.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/AbstractByteBuf.writeBytes (92 samples, 1.80%)</title><rect x="1096.5" y="851.0" width="21.3" height="15" fill="#5def5d" rx="2" ry="2"/>
+<text x="1099.5" y="862.0">i..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/buffer/PooledUnsafeDirectByteBuf.setBytes (90 samples, 1.77%)</title><rect x="1096.9" y="835.0" width="20.9" height="15" fill="#43d843" rx="2" ry="2"/>
+<text x="1099.9" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.read (89 samples, 1.75%)</title><rect x="1097.2" y="819.0" width="20.6" height="15" fill="#35ca35" rx="2" ry="2"/>
+<text x="1100.2" y="830.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.read (79 samples, 1.55%)</title><rect x="1097.4" y="803.0" width="18.3" height="15" fill="#4ee24e" rx="2" ry="2"/>
+<text x="1100.4" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/IOUtil.readIntoNativeBuffer (78 samples, 1.53%)</title><rect x="1097.6" y="787.0" width="18.1" height="15" fill="#4de14d" rx="2" ry="2"/>
+<text x="1100.6" y="798.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketDispatcher.read (77 samples, 1.51%)</title><rect x="1097.9" y="771.0" width="17.8" height="15" fill="#51e451" rx="2" ry="2"/>
+<text x="1100.9" y="782.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/FileDispatcherImpl.read0 (77 samples, 1.51%)</title><rect x="1097.9" y="755.0" width="17.8" height="15" fill="#4ce04c" rx="2" ry="2"/>
+<text x="1100.9" y="766.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>read (71 samples, 1.39%)</title><rect x="1099.2" y="739.0" width="16.5" height="15" fill="#d03e3e" rx="2" ry="2"/>
+<text x="1102.2" y="750.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SocketChannelImpl.readerCleanup (5 samples, 0.10%)</title><rect x="1116.6" y="803.0" width="1.2" height="15" fill="#43d743" rx="2" ry="2"/>
+<text x="1119.6" y="814.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/NioEventLoop.select (294 samples, 5.77%)</title><rect x="1118.5" y="931.0" width="68.0" height="15" fill="#64f564" rx="2" ry="2"/>
+<text x="1121.5" y="942.0">io/nett..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>io/netty/channel/nio/SelectedSelectionKeySetSelector.select (293 samples, 5.75%)</title><rect x="1118.5" y="915.0" width="67.8" height="15" fill="#5bee5b" rx="2" ry="2"/>
+<text x="1121.5" y="926.0">io/nett..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SelectorImpl.select (291 samples, 5.71%)</title><rect x="1118.9" y="899.0" width="67.4" height="15" fill="#54e754" rx="2" ry="2"/>
+<text x="1121.9" y="910.0">sun/nio..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/SelectorImpl.lockAndDoSelect (291 samples, 5.71%)</title><rect x="1118.9" y="883.0" width="67.4" height="15" fill="#5aed5a" rx="2" ry="2"/>
+<text x="1121.9" y="894.0">sun/nio..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/KQueueSelectorImpl.doSelect (286 samples, 5.61%)</title><rect x="1120.1" y="867.0" width="66.2" height="15" fill="#45da45" rx="2" ry="2"/>
+<text x="1123.1" y="878.0">sun/nio..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/nio/channels/spi/AbstractSelector.begin (5 samples, 0.10%)</title><rect x="1120.1" y="851.0" width="1.1" height="15" fill="#35cb35" rx="2" ry="2"/>
+<text x="1123.1" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/KQueueArrayWrapper.poll (267 samples, 5.24%)</title><rect x="1121.2" y="851.0" width="61.9" height="15" fill="#6dfe6d" rx="2" ry="2"/>
+<text x="1124.2" y="862.0">sun/ni..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/KQueueArrayWrapper.kevent0 (266 samples, 5.22%)</title><rect x="1121.2" y="835.0" width="61.6" height="15" fill="#52e552" rx="2" ry="2"/>
+<text x="1124.2" y="846.0">sun/ni..</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>kevent (245 samples, 4.81%)</title><rect x="1126.1" y="819.0" width="56.7" height="15" fill="#c83232" rx="2" ry="2"/>
+<text x="1129.1" y="830.0">kevent</text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>sun/nio/ch/KQueueSelectorImpl.updateSelectedKeys (12 samples, 0.24%)</title><rect x="1183.1" y="851.0" width="2.7" height="15" fill="#65f765" rx="2" ry="2"/>
+<text x="1186.1" y="862.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java/util/HashMap.get (5 samples, 0.10%)</title><rect x="1184.0" y="835.0" width="1.1" height="15" fill="#33c933" rx="2" ry="2"/>
+<text x="1187.0" y="846.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>thread_start (6 samples, 0.12%)</title><rect x="1188.6" y="995.0" width="1.4" height="15" fill="#dc5050" rx="2" ry="2"/>
+<text x="1191.6" y="1006.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_pthread_body (6 samples, 0.12%)</title><rect x="1188.6" y="979.0" width="1.4" height="15" fill="#e25959" rx="2" ry="2"/>
+<text x="1191.6" y="990.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>_pthread_body (6 samples, 0.12%)</title><rect x="1188.6" y="963.0" width="1.4" height="15" fill="#e76060" rx="2" ry="2"/>
+<text x="1191.6" y="974.0"></text>
+</g>
+<g class="func_g" onmouseover="s(this)" onmouseout="c()" onclick="zoom(this)">
+<title>java_start(Thread*) (6 samples, 0.12%)</title><rect x="1188.6" y="947.0" width="1.4" height="15" fill="#f06d6d" rx="2" ry="2"/>
+<text x="1191.6" y="958.0"></text>
+</g>
+</svg>
